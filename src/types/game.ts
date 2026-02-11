@@ -105,7 +105,7 @@ export interface BattleWarrior {
 }
 
 export interface StatusEffect {
-  type: 'stun' | 'defense_up' | 'attack_up' | 'intel_down' | 'defense_stack' | 'evasion' | 'taunt' | 'command_down';
+  type: 'stun' | 'defense_up' | 'attack_up' | 'intel_down' | 'defense_stack' | 'evasion' | 'taunt' | 'command_down' | 'tactic_nullify' | 'back_attack';
   value: number;
   turnsLeft: number;
 }
@@ -127,6 +127,7 @@ export type BattleAction =
   | { type: 'turn_start'; turn: number }
   | { type: 'tactic_use'; side: 'player' | 'enemy'; tacticName: string; tacticEmoji: string; events: CombatEvent[]; log: string[] }
   | { type: 'passive_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; log: string[] }
+  | { type: 'active_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'ultimate_skill'; warriorId: string; cardId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'attack'; attackerId: string; targetId: string; side: 'player' | 'enemy'; damage: number; events: CombatEvent[]; log: string[]; skillName?: string }
   | { type: 'stun_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; log: string[] }

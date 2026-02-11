@@ -109,7 +109,11 @@ export function initBattle(
   const enemySynergies = applyFactionSynergy(enemyWarriors);
   const activeSynergies = [...playerSynergies, ...enemySynergies];
 
-  return {
+  // Apply 의형제 (Liu Bei) - double 촉 synergy
+  applyBrothersSynergy(playerWarriors, playerSynergies);
+  applyBrothersSynergy(enemyWarriors, enemySynergies);
+
+  const battleState: BattleState = {
     turn: 1,
     maxTurns: 3,
     phase: 'tactic',
@@ -124,12 +128,20 @@ export function initBattle(
       selectedTactic: null,
     },
     fieldEvent,
-    log: [`⚡ 전장 이벤트: ${fieldEvent.name} - ${fieldEvent.description}`],
+    log: [
+      `⚡ 전장 이벤트: ${fieldEvent.name} - ${fieldEvent.description}`,
+    ],
     result: null,
     combatEvents: [],
     activeSynergies: activeSynergies.length > 0 ? activeSynergies : undefined,
     ultimateTriggered: null,
   };
+
+  // Apply battle-start skills (1회성)
+  applyBattleStartSkills(battleState, 'player', battleState.log);
+  applyBattleStartSkills(battleState, 'enemy', battleState.log);
+
+  return battleState;
 }
 
 function buildAITeam(
@@ -239,6 +251,80 @@ function applyFactionSynergy(warriors: BattleWarrior[]): { faction: string; effe
 }
 
 // ============================================================
+// 의형제 (Liu Bei) - 촉 synergy doubled
+// ============================================================
+
+function applyBrothersSynergy(
+  warriors: BattleWarrior[],
+  synergies: { faction: string; effect: string; level: 'minor' | 'major' }[]
+) {
+  const hasLiuBei = warriors.some((w) => w.cardId === 'w-liu-bei' && w.isAlive);
+  if (!hasLiuBei) return;
+
+  const shuSynergy = synergies.find((s) => s.faction === '촉');
+  if (!shuSynergy) return;
+
+  // Double the 촉 synergy bonus (apply it again)
+  warriors.forEach((w) => {
+    if (getWarriorById(w.cardId)?.faction === '촉') {
+      const bonus = shuSynergy.level === 'major' ? 2 : 1;
+      w.stats.attack += bonus;
+    }
+  });
+}
+
+// ============================================================
+// Battle Start Skills (1회성, initBattle 시 적용)
+// ============================================================
+
+function applyBattleStartSkills(state: BattleState, side: 'player' | 'enemy', log: string[]) {
+  const team = state[side];
+  const opponent = side === 'player' ? state.enemy : state.player;
+
+  team.warriors.forEach((w) => {
+    if (!w.isAlive) return;
+    const card = getWarriorById(w.cardId);
+    if (!card) return;
+
+    // 간웅 (Cao Cao passive) - 적 전법 1회 무효
+    if (card.id === 'w-cao-cao') {
+      team.warriors[0].statusEffects.push({ type: 'tactic_nullify', value: 1, turnsLeft: 99 });
+      log.push(`🛡️ ${card.name} 간웅 발동! 적 전법 1회 무효화 준비`);
+    }
+
+    // 대의 (Sun Quan passive) - 오 세력 방어+1
+    if (card.id === 'w-sun-quan') {
+      team.warriors.forEach((ally) => {
+        if (getWarriorById(ally.cardId)?.faction === '오' && ally.isAlive) {
+          ally.stats.defense += 1;
+        }
+      });
+      log.push(`🛡️ ${card.name} 대의 발동! 오 세력 방어+1`);
+    }
+
+    // 폭정 (Dong Zhuo active) - 적 전체 통솔-2
+    if (card.id === 'w-dong-zhuo') {
+      opponent.warriors.forEach((e) => {
+        if (e.isAlive) {
+          e.stats.command = Math.max(1, e.stats.command - 2);
+          e.maxHp = e.stats.command * 3;
+          e.currentHp = Math.min(e.currentHp, e.maxHp);
+        }
+      });
+      log.push(`😈 ${card.name} 폭정 발동! 적 전체 통솔-2`);
+    }
+
+    // 용병술 (Sun Quan active) - 전법 카드 추가 사용 가능 (전투 시작 시 전법 1장 추가)
+    if (card.id === 'w-sun-quan' && team.tactics.length > 0) {
+      // Duplicate first tactic as extra use
+      const extraTactic = { ...team.tactics[0], instanceId: generateId(), used: false };
+      team.tactics.push(extraTactic);
+      log.push(`📜 ${card.name} 용병술 발동! 전법 카드 1장 추가`);
+    }
+  });
+}
+
+// ============================================================
 // Combat Resolution
 // ============================================================
 
@@ -309,6 +395,25 @@ export function applyTactic(
   );
 
   tactic.used = true;
+
+  // Check 간웅 (Cao Cao) - 적 전법 1회 무효
+  const nullifyIdx = opponent.warriors.findIndex((w) =>
+    w.isAlive && w.statusEffects.some((e) => e.type === 'tactic_nullify' && e.turnsLeft > 0)
+  );
+  if (nullifyIdx >= 0) {
+    const nullifier = opponent.warriors[nullifyIdx];
+    nullifier.statusEffects = nullifier.statusEffects.filter((e) => e.type !== 'tactic_nullify');
+    const nullName = getWarriorById(nullifier.cardId)?.name || '';
+    const msg = `🛡️ ${nullName} 간웅 발동! ${tacticCard.name} 무효화!`;
+    newState.log.push(msg);
+    logLines.push(msg);
+    events.push({ type: 'skill', targetInstanceId: nullifier.instanceId, skillName: '간웅' });
+    newState.combatEvents = events;
+    return {
+      state: newState,
+      action: { type: 'tactic_use', side, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+    };
+  }
 
   // Check field event fire disable
   if (tacticCard.id === 't-fire' && state.fieldEvent.effect === 'disable_fire') {
@@ -466,6 +571,10 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
   applyPassiveSkills(newState, 'player', allEvents, actions);
   applyPassiveSkills(newState, 'enemy', allEvents, actions);
 
+  // Apply active skills (턴 시작 시 확률/조건부 발동)
+  applyActiveSkills(newState, 'player', allEvents, actions);
+  applyActiveSkills(newState, 'enemy', allEvents, actions);
+
   // Check for ultimate skills
   checkUltimateSkills(newState, 'player', allEvents, actions);
   checkUltimateSkills(newState, 'enemy', allEvents, actions);
@@ -576,9 +685,15 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
   return { state: newState, actions };
 }
 
-function findTarget(enemies: BattleWarrior[], _attacker: BattleWarrior): BattleWarrior | undefined {
+function findTarget(enemies: BattleWarrior[], attacker: BattleWarrior): BattleWarrior | undefined {
   const taunter = enemies.find((w) => w.isAlive && hasStatus(w, 'taunt'));
   if (taunter) return taunter;
+
+  // 백발백중 (Huang Zhong) - 후위에서도 전위 공격 가능
+  if (attacker.cardId === 'w-huang-zhong' || hasStatus(attacker, 'back_attack')) {
+    return getFirstAlive(enemies);
+  }
+
   return getFirstAlive(enemies);
 }
 
@@ -760,6 +875,186 @@ function performAttack(
   }
 }
 
+function applyActiveSkills(state: BattleState, side: 'player' | 'enemy', events: CombatEvent[], actions: BattleAction[]) {
+  const team = state[side];
+  const opponent = side === 'player' ? state.enemy : state.player;
+
+  team.warriors.forEach((w) => {
+    if (!w.isAlive) return;
+    const card = getWarriorById(w.cardId);
+    if (!card) return;
+
+    const skillEvents: CombatEvent[] = [];
+    const skillLog: string[] = [];
+
+    switch (card.id) {
+      // 조조 패왕의 기세 - 아군 전체 무력+2 (턴 시작 시 30%)
+      case 'w-cao-cao': {
+        if (Math.random() < 0.3) {
+          team.warriors.forEach((ally) => {
+            if (ally.isAlive) {
+              ally.stats.attack += 2;
+            }
+          });
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '패왕의 기세' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '패왕의 기세' });
+          const msg = `👑 ${card.name} 패왕의 기세 발동! 아군 전체 무력+2`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 사마의 공성계 - 적 전위 1턴 행동불가 (턴 시작 시 25%)
+      case 'w-sima-yi': {
+        if (Math.random() < 0.25) {
+          const frontEnemy = getFirstAlive(opponent.warriors);
+          if (frontEnemy) {
+            frontEnemy.statusEffects.push({ type: 'stun', value: 1, turnsLeft: 1 });
+            skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '공성계' });
+            events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '공성계' });
+            const enemyName = getWarriorById(frontEnemy.cardId)?.name || '';
+            const msg = `🏯 ${card.name} 공성계 발동! ${enemyName} 1턴 행동불가`;
+            state.log.push(msg);
+            skillLog.push(msg);
+          }
+        }
+        break;
+      }
+
+      // 서황 철벽수비 - HP 50% 이하일 때 방어+2
+      case 'w-xu-huang': {
+        if (w.currentHp / w.maxHp <= 0.5) {
+          w.statusEffects.push({ type: 'defense_up', value: 2, turnsLeft: 1 });
+          w.stats.defense += 2;
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '철벽수비' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '철벽수비' });
+          const msg = `🛡️ ${card.name} 철벽수비 발동! 방어+2`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 유비 인덕 - 아군 전체 HP+3 회복 (턴 시작 시 30%)
+      case 'w-liu-bei': {
+        if (Math.random() < 0.3) {
+          team.warriors.forEach((ally) => {
+            if (ally.isAlive) {
+              const heal = 3;
+              ally.currentHp = Math.min(ally.maxHp, ally.currentHp + heal);
+              skillEvents.push({ type: 'heal', targetInstanceId: ally.instanceId, value: heal });
+              events.push({ type: 'heal', targetInstanceId: ally.instanceId, value: heal });
+            }
+          });
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '인덕' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '인덕' });
+          const msg = `💚 ${card.name} 인덕 발동! 아군 전체 HP+3 회복`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 제갈량 팔진도 - 적 전체 지력 기반 데미지 (턴 시작 시 25%)
+      case 'w-zhuge-liang': {
+        if (Math.random() < 0.25) {
+          const dmg = Math.max(1, w.stats.intel);
+          opponent.warriors.filter((e) => e.isAlive).forEach((e) => {
+            applyDamage(e, dmg, skillEvents, true);
+          });
+          events.push(...skillEvents.filter(e => e.type === 'damage' || e.type === 'death'));
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '팔진도' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '팔진도' });
+          const msg = `🌀 ${card.name} 팔진도 발동! 적 전체 ${dmg} 지력 데미지`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 주유 미주공 is listed under 주유 in user spec, but cards.ts has it on w-zhou-yu
+      case 'w-zhou-yu': {
+        // 미주공 - 적 지력-3 (턴 시작 시 1회, turn 1 only)
+        if (state.turn === 1) {
+          opponent.warriors.forEach((e) => {
+            if (e.isAlive) {
+              e.stats.intel = Math.max(0, e.stats.intel - 3);
+            }
+          });
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '미주공' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '미주공' });
+          const msg = `🍺 ${card.name} 미주공 발동! 적 전체 지력-3`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+
+        // 팔진도 (주유 also has it per user spec) - 적 전체 지력 기반 데미지 (25%)
+        if (Math.random() < 0.25) {
+          const dmg = Math.max(1, w.stats.intel);
+          const pjdEvents: CombatEvent[] = [];
+          opponent.warriors.filter((e) => e.isAlive).forEach((e) => {
+            applyDamage(e, dmg, pjdEvents, true);
+          });
+          events.push(...pjdEvents);
+          skillEvents.push(...pjdEvents);
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '팔진도' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '팔진도' });
+          const msg = `🌀 ${card.name} 팔진도 발동! 적 전체 ${dmg} 지력 데미지`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 감녕 미주공 - 적 지력-3 (턴 시작 시 1회)
+      case 'w-gan-ning': {
+        if (state.turn === 1) {
+          opponent.warriors.forEach((e) => {
+            if (e.isAlive) {
+              e.stats.intel = Math.max(0, e.stats.intel - 3);
+            }
+          });
+          skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '미주공' });
+          events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '미주공' });
+          const msg = `🍺 ${card.name} 미주공 발동! 적 전체 지력-3`;
+          state.log.push(msg);
+          skillLog.push(msg);
+        }
+        break;
+      }
+
+      // 장비 뇌성벽력 - HP 40% 이하 시 적 전위 1턴 기절
+      case 'w-zhang-fei': {
+        if (w.currentHp / w.maxHp <= 0.4) {
+          const frontEnemy = getFirstAlive(opponent.warriors);
+          if (frontEnemy) {
+            frontEnemy.statusEffects.push({ type: 'stun', value: 1, turnsLeft: 1 });
+            skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '뇌성벽력' });
+            events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '뇌성벽력' });
+            const enemyName = getWarriorById(frontEnemy.cardId)?.name || '';
+            const msg = `⚡ ${card.name} 뇌성벽력 발동! ${enemyName} 1턴 기절`;
+            state.log.push(msg);
+            skillLog.push(msg);
+          }
+        }
+        break;
+      }
+    }
+
+    if (skillLog.length > 0) {
+      actions.push({
+        type: 'active_skill',
+        warriorId: w.instanceId,
+        skillName: skillLog[0],
+        side,
+        events: skillEvents,
+        log: skillLog,
+      });
+    }
+  });
+}
+
 function applyPassiveSkills(state: BattleState, side: 'player' | 'enemy', events: CombatEvent[], actions: BattleAction[]) {
   const team = state[side];
 
@@ -809,6 +1104,25 @@ function applyPassiveSkills(state: BattleState, side: 'player' | 'enemy', events
     if (card.id === 'w-zhang-fei' && w.lane === 'front' && state.turn === 1) {
       if (!w.statusEffects.some((e) => e.type === 'defense_up' && e.value === 999)) {
         w.statusEffects.push({ type: 'defense_up', value: 999, turnsLeft: 99 });
+      }
+    }
+
+    // 백발백중 (Huang Zhong) - 후위에서도 전위 공격 가능 (패시브 마커)
+    if (card.id === 'w-huang-zhong' && w.lane === 'back') {
+      if (!w.statusEffects.some((e) => e.type === 'back_attack')) {
+        w.statusEffects.push({ type: 'back_attack', value: 1, turnsLeft: 99 });
+        events.push({
+          type: 'skill',
+          targetInstanceId: w.instanceId,
+          skillName: '백발백중',
+        });
+        actions.push({
+          type: 'passive_skill',
+          warriorId: w.instanceId,
+          skillName: '백발백중',
+          side,
+          log: [`🎯 ${card.name} 백발백중! 후위에서도 전위 공격 가능`],
+        });
       }
     }
   });

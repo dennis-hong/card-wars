@@ -381,6 +381,16 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           break;
         }
 
+        case 'active_skill': {
+          setSkillNames({ [action.warriorId]: action.skillName });
+          SFX.skillActivate();
+          action.log.forEach(msg => addLiveLog(msg));
+          showCombatEvents(action.events);
+          await delay(400);
+          setSkillNames({});
+          break;
+        }
+
         case 'ultimate_skill': {
           setShowUltimate({ cardId: action.cardId, skillName: action.skillName });
           SFX.skillActivate();
