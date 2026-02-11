@@ -1,26 +1,237 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html, body {
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(255, 170, 0, 0.6); }
+}
+
+/* ============================================================
+   Booster Pack UX - Animations & Effects
+   ============================================================ */
+
+/* 3D card flip */
+.card-flip-container {
+  perspective: 800px;
+}
+
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.card-flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-flip-front,
+.card-flip-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.card-flip-front {
+  transform: rotateY(180deg);
+}
+
+/* Pack fan-spread */
+@keyframes packSlideIn {
+  from { opacity: 0; transform: translateY(40px) scale(0.8); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes packPopForward {
+  0% { transform: var(--fan-transform); }
+  50% { transform: translateY(-30px) rotate(0deg) scale(1.15); }
+  100% { transform: translateY(-20px) rotate(0deg) scale(1.1); }
+}
+
+@keyframes packTearOpen {
+  0% { clip-path: inset(0 0 0 0); }
+  30% { clip-path: inset(0 0 0 0); }
+  60% { clip-path: inset(0 50% 0 0); }
+  80% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 100% 0 0); opacity: 0; }
+}
+
+@keyframes tearGlow {
+  0% { opacity: 0; }
+  30% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+/* Cards dealing from pack */
+@keyframes cardDeal {
+  from { opacity: 0; transform: translateY(-60px) scale(0.3) rotate(10deg); }
+  to { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+/* Grade 1: Subtle shine */
+@keyframes gradeShine {
+  0% { opacity: 0; left: -100%; }
+  50% { opacity: 0.4; }
+  100% { opacity: 0; left: 100%; }
+}
+
+/* Grade 2: Blue particles + glow border */
+@keyframes rareGlow {
+  0%, 100% { box-shadow: 0 0 10px #4488ff44, 0 0 20px #4488ff22; }
+  50% { box-shadow: 0 0 20px #4488ff88, 0 0 40px #4488ff44, 0 0 60px #4488ff22; }
+}
+
+@keyframes particleFloat {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-80px) translateX(var(--px, 10px)) scale(0); opacity: 0; }
+}
+
+/* Grade 3: Purple hologram + shake */
+@keyframes holoShift {
+  0% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+  25% { background-position: 50% 0%; filter: hue-rotate(30deg); }
+  50% { background-position: 100% 50%; filter: hue-rotate(0deg); }
+  75% { background-position: 50% 100%; filter: hue-rotate(-30deg); }
+  100% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+}
+
+@keyframes heroShake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-3px, -2px); }
+  20% { transform: translate(3px, 2px); }
+  30% { transform: translate(-2px, 3px); }
+  40% { transform: translate(2px, -2px); }
+  50% { transform: translate(-3px, 1px); }
+  60% { transform: translate(3px, -1px); }
+  70% { transform: translate(-1px, 3px); }
+  80% { transform: translate(1px, -3px); }
+  90% { transform: translate(-2px, 2px); }
+}
+
+@keyframes heroLightBurst {
+  0% { transform: scale(0); opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* Grade 4: Epic legendary reveal */
+@keyframes legendShake {
+  0%, 100% { transform: translate(0, 0); }
+  5% { transform: translate(-6px, -4px); }
+  10% { transform: translate(6px, 4px); }
+  15% { transform: translate(-5px, 5px); }
+  20% { transform: translate(5px, -3px); }
+  25% { transform: translate(-4px, 2px); }
+  30% { transform: translate(4px, -5px); }
+  35% { transform: translate(-3px, 4px); }
+  40% { transform: translate(3px, -2px); }
+  45% { transform: translate(-2px, 3px); }
+  50% { transform: translate(0, 0); }
+}
+
+@keyframes legendGoldBurst {
+  0% { transform: scale(0); opacity: 1; }
+  30% { opacity: 0.8; }
+  100% { transform: scale(5); opacity: 0; }
+}
+
+@keyframes legendZoomIn {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.6); }
+}
+
+@keyframes rainbowBorder {
+  0% { border-color: #ff0000; box-shadow: 0 0 30px #ff000066, 0 0 60px #ff000033; }
+  14% { border-color: #ff8800; box-shadow: 0 0 30px #ff880066, 0 0 60px #ff880033; }
+  28% { border-color: #ffff00; box-shadow: 0 0 30px #ffff0066, 0 0 60px #ffff0033; }
+  42% { border-color: #00ff00; box-shadow: 0 0 30px #00ff0066, 0 0 60px #00ff0033; }
+  57% { border-color: #0088ff; box-shadow: 0 0 30px #0088ff66, 0 0 60px #0088ff33; }
+  71% { border-color: #8800ff; box-shadow: 0 0 30px #8800ff66, 0 0 60px #8800ff33; }
+  85% { border-color: #ff00ff; box-shadow: 0 0 30px #ff00ff66, 0 0 60px #ff00ff33; }
+  100% { border-color: #ff0000; box-shadow: 0 0 30px #ff000066, 0 0 60px #ff000033; }
+}
+
+@keyframes rainbowParticle {
+  0% { transform: translateY(0) translateX(0) scale(1) rotate(0deg); opacity: 1; filter: hue-rotate(0deg); }
+  100% { transform: translateY(var(--py, -120px)) translateX(var(--px, 20px)) scale(0) rotate(360deg); opacity: 0; filter: hue-rotate(360deg); }
+}
+
+/* Gold flash overlay for legendary */
+@keyframes goldFlash {
+  0% { opacity: 0; }
+  15% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+/* Summary screen */
+@keyframes summaryCardIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.85); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.3); }
+}
+
+@keyframes newBadge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
 }
