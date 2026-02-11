@@ -35,6 +35,7 @@ export default function Home() {
     resetGame,
     newTitleIds,
     dismissNewTitles,
+    enhanceableCount,
   } = useGameState();
 
   const [screen, setScreen] = useState<Screen>('main');
@@ -550,9 +551,14 @@ export default function Home() {
               SFX.buttonClick();
               setScreen('collection');
             }}
-            className="w-full py-3 bg-gray-700 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors"
+            className="w-full py-3 bg-gray-700 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors relative"
           >
             📚 카드 수집
+            {enhanceableCount > 0 && (
+              <span className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 text-black text-xs font-black rounded-full flex items-center justify-center animate-pulse">
+                {enhanceableCount}
+              </span>
+            )}
           </button>
 
           <button

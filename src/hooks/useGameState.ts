@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { GameState, OwnedCard, BoosterPack, Deck, Card, Grade, MAX_LEVEL } from '@/types/game';
 import { getCardById, ALL_CARDS } from '@/data/cards';
 import { TITLES } from '@/data/titles';
@@ -184,15 +184,37 @@ export function useGameState() {
     updateState((prev) => ({ ...prev, activeDeckId: deckId }));
   }, [updateState]);
 
+  // Auto-merge + enhance in one button press
   const enhanceCard = useCallback((instanceId: string): boolean => {
     let success = false;
     updateState((prev) => {
       const card = prev.ownedCards.find((c) => c.instanceId === instanceId);
-      if (!card || card.duplicates < 1) return prev;
+      if (!card) return prev;
       const cardData = getCardById(card.cardId);
       if (!cardData) return prev;
       const maxLvl = MAX_LEVEL[cardData.grade as Grade];
       if (card.level >= maxLvl) return prev;
+
+      // If no duplicates stored, auto-merge from another owned copy
+      if (card.duplicates < 1) {
+        const donor = prev.ownedCards.find(
+          (c) => c.cardId === card.cardId && c.instanceId !== instanceId
+        );
+        if (!donor) return prev; // no source to merge
+        success = true;
+        return {
+          ...prev,
+          ownedCards: prev.ownedCards
+            .filter((c) => c.instanceId !== donor.instanceId)
+            .map((c) =>
+              c.instanceId === instanceId
+                ? { ...c, level: c.level + 1 }
+                : c
+            ),
+        };
+      }
+
+      // Has stored duplicates, consume one
       success = true;
       return {
         ...prev,
@@ -255,6 +277,27 @@ export function useGameState() {
     saveState(fresh);
   }, []);
 
+  // Count cards that can be enhanced (have duplicates or extra copies)
+  const enhanceableCount = useMemo(() => {
+    const cardIdCounts: Record<string, number> = {};
+    for (const c of state.ownedCards) {
+      cardIdCounts[c.cardId] = (cardIdCounts[c.cardId] || 0) + 1;
+    }
+    let count = 0;
+    const seen = new Set<string>();
+    for (const c of state.ownedCards) {
+      if (seen.has(c.cardId)) continue;
+      seen.add(c.cardId);
+      const cardData = getCardById(c.cardId);
+      if (!cardData) continue;
+      const maxLvl = MAX_LEVEL[cardData.grade as Grade];
+      if (c.level >= maxLvl) continue;
+      const totalDupes = c.duplicates + (cardIdCounts[c.cardId] - 1);
+      if (totalDupes > 0) count++;
+    }
+    return count;
+  }, [state.ownedCards]);
+
   return {
     state,
     loaded,
@@ -271,5 +314,6 @@ export function useGameState() {
     resetGame,
     newTitleIds,
     dismissNewTitles,
+    enhanceableCount,
   };
 }
