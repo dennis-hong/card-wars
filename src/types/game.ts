@@ -151,7 +151,7 @@ export interface BattleState {
   log: string[];
   result: 'win' | 'lose' | 'draw' | null;
   combatEvents: CombatEvent[];
-  activeSynergies?: { faction: string; effect: string }[];
+  activeSynergies?: { faction: string; effect: string; side: 'player' | 'enemy' }[];
   ultimateTriggered?: { cardId: string; skillName: string } | null;
 }
 

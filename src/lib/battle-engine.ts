@@ -29,7 +29,7 @@ function createBattleWarrior(
   const card = getWarriorById(cardId);
   if (!card) throw new Error(`Card not found: ${cardId}`);
 
-  const levelBonus = Math.floor((level - 1) * 0.5);
+  const levelBonus = level - 1;
   const baseStats: WarriorStats = {
     attack: card.stats.attack + levelBonus,
     command: card.stats.command + levelBonus,
@@ -105,8 +105,8 @@ export function initBattle(
   const enemyTactics = buildAITactics();
 
   // Apply faction synergy and collect synergy info
-  const playerSynergies = applyFactionSynergy(playerWarriors);
-  const enemySynergies = applyFactionSynergy(enemyWarriors);
+  const playerSynergies = applyFactionSynergy(playerWarriors).map(s => ({ ...s, side: 'player' as const }));
+  const enemySynergies = applyFactionSynergy(enemyWarriors).map(s => ({ ...s, side: 'enemy' as const }));
   const activeSynergies = [...playerSynergies, ...enemySynergies];
 
   // Apply 의형제 (Liu Bei) - double 촉 synergy

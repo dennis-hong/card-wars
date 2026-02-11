@@ -102,24 +102,42 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
           <div><span className="text-yellow-400/70">방</span> <span className="text-yellow-400 font-bold">{card.stats.defense}</span></div>
         </div>
       ) : (
-        <div className={`grid grid-cols-4 px-1.5 text-center text-white ${size === 'lg' ? 'mt-2 gap-1.5' : 'mt-1 gap-1'}`}>
-          <div>
-            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-red-400/70 leading-tight`}>무력</div>
-            <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-red-400`}>{card.stats.attack}</div>
-          </div>
-          <div>
-            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-green-400/70 leading-tight`}>통솔</div>
-            <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-green-400`}>{card.stats.command}</div>
-          </div>
-          <div>
-            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-blue-400/70 leading-tight`}>지력</div>
-            <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-blue-400`}>{card.stats.intel}</div>
-          </div>
-          <div>
-            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-yellow-400/70 leading-tight`}>방어</div>
-            <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-yellow-400`}>{card.stats.defense}</div>
-          </div>
-        </div>
+        (() => {
+          const lvlBonus = (owned?.level || 1) - 1;
+          const defBonus = Math.floor(lvlBonus * 0.5);
+          return (
+            <div className={`grid grid-cols-4 px-1.5 text-center text-white ${size === 'lg' ? 'mt-2 gap-1.5' : 'mt-1 gap-1'}`}>
+              <div>
+                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-red-400/70 leading-tight`}>무력</div>
+                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-red-400`}>
+                  {card.stats.attack + lvlBonus}
+                  {lvlBonus > 0 && <span className="text-[9px] text-red-300/60 ml-0.5">+{lvlBonus}</span>}
+                </div>
+              </div>
+              <div>
+                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-green-400/70 leading-tight`}>통솔</div>
+                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-green-400`}>
+                  {card.stats.command + lvlBonus}
+                  {lvlBonus > 0 && <span className="text-[9px] text-green-300/60 ml-0.5">+{lvlBonus}</span>}
+                </div>
+              </div>
+              <div>
+                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-blue-400/70 leading-tight`}>지력</div>
+                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-blue-400`}>
+                  {card.stats.intel + lvlBonus}
+                  {lvlBonus > 0 && <span className="text-[9px] text-blue-300/60 ml-0.5">+{lvlBonus}</span>}
+                </div>
+              </div>
+              <div>
+                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-yellow-400/70 leading-tight`}>방어</div>
+                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-yellow-400`}>
+                  {card.stats.defense + defBonus}
+                  {defBonus > 0 && <span className="text-[9px] text-yellow-300/60 ml-0.5">+{defBonus}</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })()
       )}
 
       {/* Skills (only in detail mode) */}

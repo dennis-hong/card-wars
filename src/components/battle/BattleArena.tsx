@@ -247,6 +247,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
   const [showLog, setShowLog] = useState(false);
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
   const [skillNames, setSkillNames] = useState<Record<string, string>>({});
+  const [skillBanner, setSkillBanner] = useState<{ warriorName: string; skillName: string; side: 'player' | 'enemy' } | null>(null);
   const [attackingId, setAttackingId] = useState<string | null>(null);
   const [hitId, setHitId] = useState<string | null>(null);
   const [showFieldEvent, setShowFieldEvent] = useState(true);
@@ -375,19 +376,33 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
 
         case 'passive_skill': {
           setSkillNames({ [action.warriorId]: action.skillName });
+          {
+            const allW = battle ? [...battle.player.warriors, ...battle.enemy.warriors] : [];
+            const w = allW.find(w => w.instanceId === action.warriorId);
+            const wCard = w ? getWarriorById(w.cardId) : null;
+            setSkillBanner({ warriorName: wCard?.name || '', skillName: action.skillName, side: action.side });
+          }
           action.log.forEach(msg => addLiveLog(msg));
-          await delay(300);
+          await delay(500);
           setSkillNames({});
+          setSkillBanner(null);
           break;
         }
 
         case 'active_skill': {
           setSkillNames({ [action.warriorId]: action.skillName });
+          {
+            const allW = battle ? [...battle.player.warriors, ...battle.enemy.warriors] : [];
+            const w = allW.find(w => w.instanceId === action.warriorId);
+            const wCard = w ? getWarriorById(w.cardId) : null;
+            setSkillBanner({ warriorName: wCard?.name || '', skillName: action.skillName, side: action.side });
+          }
           SFX.skillActivate();
           action.log.forEach(msg => addLiveLog(msg));
           showCombatEvents(action.events);
-          await delay(400);
+          await delay(500);
           setSkillNames({});
+          setSkillBanner(null);
           break;
         }
 
@@ -419,6 +434,10 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           // Show skill name if applicable
           if (action.skillName) {
             setSkillNames(prev => ({ ...prev, [action.attackerId]: action.skillName! }));
+            const allW = battle ? [...battle.player.warriors, ...battle.enemy.warriors] : [];
+            const w = allW.find(w => w.instanceId === action.attackerId);
+            const wCard = w ? getWarriorById(w.cardId) : null;
+            setSkillBanner({ warriorName: wCard?.name || '', skillName: action.skillName, side: action.side });
           }
 
           // 4. Update warrior HP in displayed state
@@ -449,6 +468,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           setHitId(null);
           setSlashEffect(null);
           setSkillNames({});
+          setSkillBanner(null);
           await delay(100);
           break;
         }
@@ -569,6 +589,13 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
           80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
           100% { opacity: 0; transform: translate(-50%, -10px) scale(0.9); }
+        }
+        @keyframes skillBannerAnim {
+          0% { opacity: 0; transform: scale(0.5); }
+          15% { opacity: 1; transform: scale(1.08); }
+          30% { opacity: 1; transform: scale(1); }
+          80% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(0.9) translateY(-10px); }
         }
         @keyframes fieldEventBanner {
           0% { opacity: 0; transform: translateY(-20px) scale(0.8); }
@@ -737,6 +764,28 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
         </>
       )}
 
+      {/* Skill Banner Overlay */}
+      {skillBanner && !showUltimate && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+          <div
+            className="text-center"
+            style={{ animation: 'skillBannerAnim 0.5s ease-out forwards' }}
+          >
+            <div className={`px-6 py-3 rounded-xl border-2 backdrop-blur-sm ${
+              skillBanner.side === 'player'
+                ? 'bg-blue-900/80 border-blue-400/60'
+                : 'bg-red-900/80 border-red-400/60'
+            }`}>
+              <div className="text-xs font-bold mb-1" style={{ color: skillBanner.side === 'player' ? '#93c5fd' : '#fca5a5' }}>
+                {skillBanner.side === 'player' ? '아군' : '적군'} 스킬 발동
+              </div>
+              <div className="text-lg font-black text-white">{skillBanner.warriorName}</div>
+              <div className="text-base font-bold text-purple-300">⚡ {skillBanner.skillName}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Turn Announce Overlay */}
       {turnAnnounce && (
         <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
@@ -796,17 +845,17 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
         <div className="text-[10px] text-amber-300/70">{battle.fieldEvent.description}</div>
       </div>
 
-      {/* Synergy indicator (compact) */}
-      {battle.activeSynergies && battle.activeSynergies.length > 0 && (
-        <div className="flex justify-center gap-2 mb-3">
-          {battle.activeSynergies.map((syn, i) => (
+      {/* Enemy synergy */}
+      {battle.activeSynergies && battle.activeSynergies.filter(s => s.side === 'enemy').length > 0 && (
+        <div className="flex justify-center gap-2 mb-2">
+          {battle.activeSynergies.filter(s => s.side === 'enemy').map((syn, i) => (
             <div key={i} className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
               syn.faction === '위' ? 'bg-blue-900/50 border-blue-500/50 text-blue-300' :
               syn.faction === '촉' ? 'bg-red-900/50 border-red-500/50 text-red-300' :
               syn.faction === '오' ? 'bg-green-900/50 border-green-500/50 text-green-300' :
               'bg-purple-900/50 border-purple-500/50 text-purple-300'
             }`}>
-              {syn.faction} {'level' in syn && (syn as {level?:string}).level === 'major' ? '대시너지' : '소시너지'}: {syn.effect}
+              적 {syn.faction} {'level' in syn && (syn as {level?:string}).level === 'major' ? '대시너지' : '소시너지'}: {syn.effect}
             </div>
           ))}
         </div>
