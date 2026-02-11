@@ -459,7 +459,9 @@ export default function Home() {
       {/* Title */}
       <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10">
         <div className="text-center mb-12">
-          <div className="text-6xl mb-4" style={{ filter: 'drop-shadow(0 0 20px rgba(255,170,0,0.5))' }}>🎴</div>
+          <div className="mb-4" style={{ filter: 'drop-shadow(0 0 20px rgba(255,170,0,0.5))' }}>
+            <img src="/images/logo.png" alt="Warlords Card Wars" className="w-28 h-28 mx-auto object-contain" />
+          </div>
           <h1
             className="text-5xl font-black text-white tracking-widest mb-2"
             style={{ textShadow: '0 0 40px rgba(255,170,0,0.4), 0 4px 8px rgba(0,0,0,0.8)' }}
