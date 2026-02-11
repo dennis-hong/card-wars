@@ -95,31 +95,28 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
 
       {/* Stats */}
       {size === 'sm' ? (
-        <div className="flex items-center justify-center gap-0.5 px-1 mt-1 text-[11px] font-bold leading-none">
-          <span className="text-red-400">{card.stats.attack}</span>
-          <span className="text-white/40">/</span>
-          <span className="text-green-400">{card.stats.command}</span>
-          <span className="text-white/40">/</span>
-          <span className="text-blue-400">{card.stats.intel}</span>
-          <span className="text-white/40">/</span>
-          <span className="text-yellow-400">{card.stats.defense}</span>
+        <div className="grid grid-cols-4 px-0.5 mt-1 text-center text-[9px] leading-tight">
+          <div><span className="text-red-400/70">무</span> <span className="text-red-400 font-bold">{card.stats.attack}</span></div>
+          <div><span className="text-green-400/70">통</span> <span className="text-green-400 font-bold">{card.stats.command}</span></div>
+          <div><span className="text-blue-400/70">지</span> <span className="text-blue-400 font-bold">{card.stats.intel}</span></div>
+          <div><span className="text-yellow-400/70">방</span> <span className="text-yellow-400 font-bold">{card.stats.defense}</span></div>
         </div>
       ) : (
         <div className={`grid grid-cols-4 px-1.5 text-center text-white ${size === 'lg' ? 'mt-2 gap-1.5' : 'mt-1 gap-1'}`}>
-          <div title="무력">
-            <div className={`${size === 'lg' ? 'text-sm' : 'text-xs'} leading-tight`}>⚔️</div>
+          <div>
+            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-red-400/70 leading-tight`}>무력</div>
             <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-red-400`}>{card.stats.attack}</div>
           </div>
-          <div title="통솔">
-            <div className={`${size === 'lg' ? 'text-sm' : 'text-xs'} leading-tight`}>🛡️</div>
+          <div>
+            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-green-400/70 leading-tight`}>통솔</div>
             <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-green-400`}>{card.stats.command}</div>
           </div>
-          <div title="지력">
-            <div className={`${size === 'lg' ? 'text-sm' : 'text-xs'} leading-tight`}>🧠</div>
+          <div>
+            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-blue-400/70 leading-tight`}>지력</div>
             <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-blue-400`}>{card.stats.intel}</div>
           </div>
-          <div title="방어">
-            <div className={`${size === 'lg' ? 'text-sm' : 'text-xs'} leading-tight`}>🏰</div>
+          <div>
+            <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-yellow-400/70 leading-tight`}>방어</div>
             <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-yellow-400`}>{card.stats.defense}</div>
           </div>
         </div>

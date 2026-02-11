@@ -99,7 +99,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   };
 
   const handleSave = () => {
-    if (warriors.length !== 3 || tactics.length !== 2) return;
+    if (warriors.length !== 3 || tactics.length > 2) return;
     const lanes = warriors.map((w) => w.lane);
     if (new Set(lanes).size !== 3) {
       alert('무장을 각각 다른 진영(전위/중위/후위)에 배치해주세요!');
@@ -109,7 +109,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
     onSave({ id: deck?.id || generateId(), name: deckName, warriors, tactics });
   };
 
-  const isValid = warriors.length === 3 && tactics.length === 2 && new Set(warriors.map((w) => w.lane)).size === 3;
+  const isValid = warriors.length === 3 && tactics.length <= 2 && new Set(warriors.map((w) => w.lane)).size === 3;
 
   return (
     <div className="min-h-screen bg-gray-900 p-4">
@@ -222,7 +222,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
 
       {/* Current Deck Slots */}
       <div className="bg-gray-800/50 rounded-xl p-3 mb-4">
-        <div className="text-sm text-gray-400 mb-2">덱 구성 (무장 3 + 전법 2)</div>
+        <div className="text-sm text-gray-400 mb-2">덱 구성 (무장 3필수 + 전법 0~2)</div>
 
         {/* Warriors in lanes */}
         <div className="grid grid-cols-3 gap-2 mb-3">
