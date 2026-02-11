@@ -194,26 +194,46 @@ function buildAITactics() {
   return tactics;
 }
 
-function applyFactionSynergy(warriors: BattleWarrior[]): { faction: string; effect: string }[] {
+function applyFactionSynergy(warriors: BattleWarrior[]): { faction: string; effect: string; level: 'minor' | 'major' }[] {
   const factions = warriors.map((w) => getWarriorById(w.cardId)?.faction);
-  const synergies: { faction: string; effect: string }[] = [];
-  if (factions.every((f) => f === factions[0]) && factions[0]) {
-    const faction = factions[0];
-    warriors.forEach((w) => {
-      switch (faction) {
-        case '위': w.stats.defense += 2; break;
-        case '촉': w.stats.attack += 2; break;
-        case '오': w.stats.intel += 2; break;
-        case '군벌': w.stats.command += 2; w.maxHp += 6; w.currentHp += 6; break;
-      }
-    });
-    const effectMap: Record<string, string> = {
-      '위': '방어+2',
-      '촉': '무력+2',
-      '오': '지력+2',
-      '군벌': '통솔+2',
-    };
-    synergies.push({ faction, effect: effectMap[faction] });
+  const synergies: { faction: string; effect: string; level: 'minor' | 'major' }[] = [];
+
+  // Count faction occurrences
+  const factionCounts: Record<string, number> = {};
+  for (const f of factions) {
+    if (f) factionCounts[f] = (factionCounts[f] || 0) + 1;
+  }
+
+  for (const [faction, count] of Object.entries(factionCounts)) {
+    if (count >= 3) {
+      // Major synergy (3/3)
+      warriors.forEach((w) => {
+        if (getWarriorById(w.cardId)?.faction === faction) {
+          switch (faction) {
+            case '위': w.stats.defense += 2; break;
+            case '촉': w.stats.attack += 2; break;
+            case '오': w.stats.intel += 2; break;
+            case '군벌': w.stats.command += 2; w.maxHp += 6; w.currentHp += 6; break;
+          }
+        }
+      });
+      const effectMap: Record<string, string> = { '위': '방어+2', '촉': '무력+2', '오': '지력+2', '군벌': '통솔+2' };
+      synergies.push({ faction, effect: effectMap[faction], level: 'major' });
+    } else if (count >= 2) {
+      // Minor synergy (2/3)
+      warriors.forEach((w) => {
+        if (getWarriorById(w.cardId)?.faction === faction) {
+          switch (faction) {
+            case '위': w.stats.defense += 1; break;
+            case '촉': w.stats.attack += 1; break;
+            case '오': w.stats.intel += 1; break;
+            case '군벌': w.stats.command += 1; w.maxHp += 3; w.currentHp += 3; break;
+          }
+        }
+      });
+      const effectMap: Record<string, string> = { '위': '방어+1', '촉': '무력+1', '오': '지력+1', '군벌': '통솔+1' };
+      synergies.push({ faction, effect: effectMap[faction], level: 'minor' });
+    }
   }
   return synergies;
 }

@@ -92,11 +92,8 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
         setCardFloat(false);
         setEnhanceEffect(null);
       }, 1500);
-      // Refresh selected card from ownedCards after state update
-      setTimeout(() => {
-        const updated = ownedCards.find((c) => c.instanceId === selectedCard.instanceId);
-        if (updated) setSelectedCard({ ...updated });
-      }, 50);
+      // Refresh selected card - level up, recalculate
+      setSelectedCard(prev => prev ? { ...prev, level: prev.level + 1 } : prev);
     }
   };
 

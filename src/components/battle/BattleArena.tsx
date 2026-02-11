@@ -796,7 +796,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
               syn.faction === '오' ? 'bg-green-900/50 border-green-500/50 text-green-300' :
               'bg-purple-900/50 border-purple-500/50 text-purple-300'
             }`}>
-              {syn.faction} 시너지: {syn.effect}
+              {syn.faction} {'level' in syn && (syn as {level?:string}).level === 'major' ? '대시너지' : '소시너지'}: {syn.effect}
             </div>
           ))}
         </div>
@@ -946,16 +946,41 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
 
       {/* Battle Log */}
       {showLog && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-white font-bold">전투 로그</h3>
-              <button onClick={() => setShowLog(false)} className="text-gray-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowLog(false)}>
+          <div className="bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3 sticky top-0 bg-gray-900/95 pb-2 border-b border-white/10">
+              <h3 className="text-white font-bold text-lg">📜 전투 로그</h3>
+              <button onClick={() => setShowLog(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
             </div>
             <div className="space-y-1">
-              {battle.log.map((msg, i) => (
-                <div key={i} className="text-xs text-gray-300">{msg}</div>
-              ))}
+              {[...battle.log].reverse().map((msg, i) => {
+                // Determine log style based on content
+                let colorClass = 'text-gray-300';
+                let fontClass = 'text-xs';
+                if (msg.includes('────') || msg.includes('턴 ')) {
+                  return (
+                    <div key={i} className="text-center text-yellow-500/80 font-bold text-xs py-2 border-t border-yellow-500/20 mt-2">
+                      {msg.replace(/\n/g, '')}
+                    </div>
+                  );
+                }
+                if (msg.includes('🎉') || msg.includes('승리')) { colorClass = 'text-yellow-300'; fontClass = 'text-sm font-bold'; }
+                else if (msg.includes('💀') || msg.includes('패배') || msg.includes('전사')) { colorClass = 'text-red-400'; fontClass = 'text-sm font-bold'; }
+                else if (msg.includes('🌟') || msg.includes('궁극기')) { colorClass = 'text-yellow-300'; fontClass = 'text-xs font-bold'; }
+                else if (msg.includes('⚔️')) colorClass = 'text-red-300';
+                else if (msg.includes('💚') || msg.includes('치유') || msg.includes('HP+')) colorClass = 'text-green-300';
+                else if (msg.includes('🔥') || msg.includes('화공')) colorClass = 'text-orange-300';
+                else if (msg.includes('💫') || msg.includes('기절')) colorClass = 'text-purple-300';
+                else if (msg.includes('🛡️') || msg.includes('방어')) colorClass = 'text-blue-300';
+                else if (msg.includes('⬆️') || msg.includes('발동')) colorClass = 'text-cyan-300';
+                else if (msg.includes('⚡')) colorClass = 'text-amber-300';
+
+                return (
+                  <div key={i} className={`${fontClass} ${colorClass} py-0.5 px-2 rounded hover:bg-white/5`}>
+                    {msg}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
