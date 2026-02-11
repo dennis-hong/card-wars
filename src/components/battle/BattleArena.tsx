@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BattleState, BattleWarrior, BattleAction, Deck, OwnedCard, CombatEvent } from '@/types/game';
 import { getWarriorById, getTacticById } from '@/data/cards';
+import { getWarriorImage } from '@/lib/warrior-images';
 import { initBattle, applyTactic, resolveCombat, selectAITactic } from '@/lib/battle-engine';
 import { SFX } from '@/lib/sound';
 
@@ -129,7 +130,16 @@ function WarriorSlot({
         {warrior.lane === 'front' ? '전위' : warrior.lane === 'mid' ? '중위' : '후위'}
       </div>
 
-      <div className="text-lg">{isDead ? '💀' : card.grade === 4 ? '🌟' : '⚔️'}</div>
+      {(() => {
+        const img = getWarriorImage(warrior.cardId);
+        return img && !isDead ? (
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-white/30 mx-auto">
+            <img src={img} alt={card.name} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="text-lg">{isDead ? '💀' : card.grade === 4 ? '🌟' : '⚔️'}</div>
+        );
+      })()}
       <div className="text-xs font-bold text-white mt-1">{card.name}</div>
       <div className="text-[10px] text-gray-400">{card.faction}</div>
 
@@ -526,7 +536,16 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 p-4 relative overflow-hidden">
+    <div
+      className="min-h-screen p-4 relative overflow-hidden"
+      style={{
+        backgroundImage: 'url(/images/battle-bg.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Dark overlay */}
+      <div className="fixed inset-0 bg-black/60 pointer-events-none" />
       {/* CSS Animations */}
       <style jsx global>{`
         @keyframes damageFloat {

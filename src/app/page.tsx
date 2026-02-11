@@ -381,7 +381,18 @@ export default function Home() {
 
   // ─── Main Menu ───
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 flex flex-col">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Background Image */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: 'url(/images/title-bg.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+      <div className="fixed inset-0 z-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
+
       {/* New Title Popup */}
       {hasNewTitles && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
@@ -446,14 +457,22 @@ export default function Home() {
       )}
 
       {/* Title */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10">
         <div className="text-center mb-12">
-          <div className="text-6xl mb-4">🎴</div>
-          <h1 className="text-4xl font-bold text-white tracking-wider mb-2">
+          <div className="text-6xl mb-4" style={{ filter: 'drop-shadow(0 0 20px rgba(255,170,0,0.5))' }}>🎴</div>
+          <h1
+            className="text-5xl font-black text-white tracking-widest mb-2"
+            style={{ textShadow: '0 0 40px rgba(255,170,0,0.4), 0 4px 8px rgba(0,0,0,0.8)' }}
+          >
             WARLORDS
           </h1>
-          <div className="text-lg text-amber-400 tracking-widest">CARD WARS</div>
-          <div className="text-xs text-gray-500 mt-2">5분 컷 삼국지 카드 배틀</div>
+          <div
+            className="text-xl font-bold text-amber-400 tracking-[0.3em]"
+            style={{ textShadow: '0 0 20px rgba(251,191,36,0.4)' }}
+          >
+            CARD WARS
+          </div>
+          <div className="text-sm text-gray-300 mt-2 tracking-wider">5분 컷 삼국지 카드 배틀</div>
 
           {/* Active Title */}
           {activeTitleData && (
@@ -472,7 +491,7 @@ export default function Home() {
         </div>
 
         {/* Stats bar */}
-        <div className="flex gap-6 mb-8 text-center">
+        <div className="flex gap-6 mb-8 text-center bg-black/30 backdrop-blur-sm rounded-2xl px-6 py-3 border border-white/10">
           <div>
             <div className="text-xl font-bold text-green-400">{state.stats.wins}</div>
             <div className="text-xs text-gray-500">승리</div>
@@ -531,7 +550,7 @@ export default function Home() {
               SFX.buttonClick();
               setScreen('battle');
             }}
-            className="w-full py-4 bg-gradient-to-r from-red-700 to-red-600 text-white font-bold rounded-xl hover:from-red-600 hover:to-red-500 transition-all"
+            className="w-full py-4 bg-gradient-to-r from-red-700/90 to-red-600/90 backdrop-blur-sm text-white font-bold text-lg rounded-xl hover:from-red-600 hover:to-red-500 active:scale-95 transition-all border border-red-500/30 shadow-lg shadow-red-900/30"
           >
             ⚔️ AI 대전
           </button>
@@ -541,7 +560,7 @@ export default function Home() {
               SFX.buttonClick();
               setScreen('deck-list');
             }}
-            className="w-full py-3 bg-gray-700 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors"
+            className="w-full py-3 bg-white/10 backdrop-blur-sm text-white font-bold rounded-xl hover:bg-white/20 active:scale-95 transition-all border border-white/10"
           >
             🃏 덱 관리
           </button>
@@ -551,11 +570,11 @@ export default function Home() {
               SFX.buttonClick();
               setScreen('collection');
             }}
-            className="w-full py-3 bg-gray-700 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors relative"
+            className="w-full py-3 bg-white/10 backdrop-blur-sm text-white font-bold rounded-xl hover:bg-white/20 active:scale-95 transition-all border border-white/10 relative"
           >
             📚 카드 수집
             {enhanceableCount > 0 && (
-              <span className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 text-black text-xs font-black rounded-full flex items-center justify-center animate-pulse">
+              <span className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 text-black text-xs font-black rounded-full flex items-center justify-center animate-pulse shadow-lg shadow-yellow-500/50">
                 {enhanceableCount}
               </span>
             )}
@@ -566,7 +585,7 @@ export default function Home() {
               SFX.buttonClick();
               setScreen('titles');
             }}
-            className="w-full py-3 bg-gray-700 text-white font-bold rounded-xl hover:bg-gray-600 transition-colors"
+            className="w-full py-3 bg-white/10 backdrop-blur-sm text-white font-bold rounded-xl hover:bg-white/20 active:scale-95 transition-all border border-white/10"
           >
             🏆 칭호 ({state.earnedTitles.length}/{TITLES.length})
           </button>
@@ -577,7 +596,7 @@ export default function Home() {
                 SFX.buttonClick();
                 setScreen('booster');
               }}
-              className="w-full py-3 bg-gray-700/50 text-gray-400 font-bold rounded-xl hover:bg-gray-600/50 transition-colors"
+              className="w-full py-3 bg-white/5 backdrop-blur-sm text-gray-400 font-bold rounded-xl hover:bg-white/10 active:scale-95 transition-all border border-white/5"
             >
               📦 부스터팩
             </button>
@@ -586,7 +605,7 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 text-center">
+      <div className="p-4 text-center relative z-10">
         <button
           onClick={() => {
             if (confirm('정말 게임을 초기화하시겠습니까? 모든 데이터가 삭제됩니다!')) {

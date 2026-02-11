@@ -1,6 +1,8 @@
 'use client';
 
 import { WarriorCard, GRADE_LABELS, GRADE_COLORS, FACTION_COLORS, OwnedCard } from '@/types/game';
+import { getWarriorImage } from '@/lib/warrior-images';
+import { useState } from 'react';
 
 interface Props {
   card: WarriorCard;
@@ -23,13 +25,15 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
   const factionColor = FACTION_COLORS[card.faction];
   const isLegend = card.grade === 4;
   const isHero = card.grade >= 3;
+  const portraitSrc = getWarriorImage(card.id);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <div
       onClick={onClick}
       className={`
         relative rounded-lg overflow-hidden cursor-pointer select-none
-        transition-all duration-200
+        transition-all duration-200 active:scale-95
         ${SIZE_CLASSES[size]}
         ${selected ? 'ring-2 ring-yellow-400 scale-105' : 'hover:scale-105'}
         ${isLegend ? 'shadow-[0_0_20px_rgba(255,170,0,0.5)]' : isHero ? 'shadow-[0_0_12px_rgba(170,68,255,0.4)]' : 'shadow-lg'}
@@ -41,7 +45,7 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
     >
       {/* Grade glow for legendary */}
       {isLegend && (
-        <div className="absolute inset-0 animate-pulse opacity-20" style={{
+        <div className="absolute inset-0 animate-pulse opacity-20 pointer-events-none" style={{
           background: `radial-gradient(circle, ${gradeColor}, transparent)`,
         }} />
       )}
@@ -62,11 +66,28 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
         </div>
       </div>
 
-      {/* Portrait placeholder */}
-      <div className="relative mx-2 mt-1 rounded bg-black/30 flex items-center justify-center aspect-square">
-        <span className={size === 'sm' ? 'text-3xl' : 'text-4xl'}>{card.grade === 4 ? '🌟' : '⚔️'}</span>
+      {/* Portrait */}
+      <div className="relative mx-2 mt-1 rounded overflow-hidden bg-black/30 flex items-center justify-center aspect-square">
+        {portraitSrc && !imgError ? (
+          <img
+            src={portraitSrc}
+            alt={card.name}
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <span className={size === 'sm' ? 'text-3xl' : 'text-4xl'}>{card.grade === 4 ? '🌟' : '⚔️'}</span>
+        )}
+        {/* Grade overlay shimmer for hero+ */}
+        {isHero && (
+          <div className="absolute inset-0 pointer-events-none opacity-30" style={{
+            background: `linear-gradient(135deg, transparent 40%, ${gradeColor}66 50%, transparent 60%)`,
+            backgroundSize: '200% 200%',
+            animation: 'cardShimmer 3s ease-in-out infinite',
+          }} />
+        )}
         {owned && (
-          <div className={`absolute top-0.5 right-0.5 bg-black/60 text-yellow-400 px-1 rounded ${size === 'sm' ? 'text-[9px]' : 'text-xs font-bold'}`}>
+          <div className={`absolute top-0.5 right-0.5 bg-black/70 text-yellow-400 px-1 rounded ${size === 'sm' ? 'text-[9px]' : 'text-xs font-bold'}`}>
             Lv.{owned.level}
           </div>
         )}
