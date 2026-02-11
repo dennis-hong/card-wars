@@ -155,9 +155,9 @@ function WarriorSlot({
       </div>
 
       {/* Stats */}
-      <div className="flex justify-center gap-1 mt-1 text-[9px] text-gray-300">
-        <span>⚔️{warrior.stats.attack}</span>
-        <span>🏰{warrior.stats.defense}</span>
+      <div className="flex justify-center gap-1.5 mt-1 text-[10px]">
+        <span className="text-red-300 font-bold">⚔️{warrior.stats.attack}</span>
+        <span className="text-blue-300 font-bold">🏰{warrior.stats.defense}</span>
       </div>
 
       {/* Status effects */}
@@ -575,7 +575,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
       }}
     >
       {/* Dark overlay */}
-      <div className="fixed inset-0 bg-black/60 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/30 pointer-events-none z-0" />
       {/* CSS Animations */}
       <style jsx global>{`
         @keyframes damageFloat {
@@ -909,6 +909,22 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           ) : null;
         })}
       </div>
+
+      {/* Player synergy */}
+      {battle.activeSynergies && battle.activeSynergies.filter(s => s.side === 'player').length > 0 && (
+        <div className="flex justify-center gap-2 mb-3">
+          {battle.activeSynergies.filter(s => s.side === 'player').map((syn, i) => (
+            <div key={i} className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+              syn.faction === '위' ? 'bg-blue-900/50 border-blue-500/50 text-blue-300' :
+              syn.faction === '촉' ? 'bg-red-900/50 border-red-500/50 text-red-300' :
+              syn.faction === '오' ? 'bg-green-900/50 border-green-500/50 text-green-300' :
+              'bg-purple-900/50 border-purple-500/50 text-purple-300'
+            }`}>
+              아군 {syn.faction} {'level' in syn && (syn as {level?:string}).level === 'major' ? '대시너지' : '소시너지'}: {syn.effect}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Live Battle Log (bottom overlay) */}
       {liveLog.length > 0 && (

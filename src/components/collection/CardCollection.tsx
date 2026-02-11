@@ -30,6 +30,7 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
   const [filterGrade, setFilterGrade] = useState<Grade | 0>(0);
   const [filterFaction, setFilterFaction] = useState<Faction | '전체'>('전체');
   const [filterType, setFilterType] = useState<'all' | 'warrior' | 'tactic'>('all');
+  const [sortBy, setSortBy] = useState<'grade' | 'level' | 'attack' | 'name'>('grade');
   const [enhanceEffect, setEnhanceEffect] = useState<{ grade: Grade; oldLevel: number; newLevel: number } | null>(null);
   const [cardFloat, setCardFloat] = useState(false);
 
@@ -61,7 +62,7 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
   }, [cardIdCounts]);
 
   const filteredCards = useMemo(() => {
-    return ownedCards.filter((oc) => {
+    const filtered = ownedCards.filter((oc) => {
       const card = getCardById(oc.cardId);
       if (!card) return false;
       if (filterType !== 'all' && card.type !== filterType) return false;
@@ -69,7 +70,23 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
       if (filterFaction !== '전체' && card.type === 'warrior' && card.faction !== filterFaction) return false;
       return true;
     });
-  }, [ownedCards, filterGrade, filterFaction, filterType]);
+    return filtered.sort((a, b) => {
+      const ca = getCardById(a.cardId);
+      const cb = getCardById(b.cardId);
+      if (!ca || !cb) return 0;
+      switch (sortBy) {
+        case 'grade': return cb.grade - ca.grade || b.level - a.level;
+        case 'level': return b.level - a.level || cb.grade - ca.grade;
+        case 'attack': {
+          const atkA = ca.type === 'warrior' ? ca.stats.attack + (a.level - 1) : 0;
+          const atkB = cb.type === 'warrior' ? cb.stats.attack + (b.level - 1) : 0;
+          return atkB - atkA;
+        }
+        case 'name': return ca.name.localeCompare(cb.name, 'ko');
+        default: return 0;
+      }
+    });
+  }, [ownedCards, filterGrade, filterFaction, filterType, sortBy]);
 
   const handleSelectCard = (owned: OwnedCard) => {
     SFX.buttonClick();
@@ -437,6 +454,18 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
           ))}
         </div>
       )}
+
+      {/* Sort */}
+      <div className="flex gap-2 mb-4 items-center">
+        <span className="text-[10px] text-gray-500">정렬:</span>
+        {([['grade', '등급'], ['level', '레벨'], ['attack', '무력'], ['name', '이름']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSortBy(key)}
+            className={`px-2 py-0.5 rounded text-[10px] font-bold ${sortBy === key ? 'bg-amber-600 text-white' : 'bg-gray-700/50 text-gray-400'}`}
+          >{label}</button>
+        ))}
+      </div>
 
       {/* Card grid with enhance badges */}
       <div className="flex flex-wrap gap-2 justify-center">
