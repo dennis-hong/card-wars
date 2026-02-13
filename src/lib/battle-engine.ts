@@ -438,7 +438,7 @@ export function applyTactic(
     newState.combatEvents = events;
     return {
       state: newState,
-      action: { type: 'tactic_use', side, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
     };
   }
 
@@ -450,7 +450,7 @@ export function applyTactic(
     newState.combatEvents = events;
     return {
       state: newState,
-      action: { type: 'tactic_use', side, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
     };
   }
 
@@ -595,7 +595,7 @@ export function applyTactic(
   newState.combatEvents = events;
   return {
     state: newState,
-    action: { type: 'tactic_use', side, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+    action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
   };
 }
 

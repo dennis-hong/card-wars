@@ -1,0 +1,134 @@
+Original prompt: 웹 게임 개발 스킬을 활용해서 현재 UI 를 검토하고 개선 사항을 제안해줘.
+
+- Started UI review using develop-web-game skill workflow.
+- Need to run Playwright client against local dev server and inspect screenshots/console.
+- Playwright client initially failed: missing `playwright` package.
+- Installed `playwright` as dev dependency to run scripted UI inspection.
+- Ran web_game_playwright_client captures for main/booster/deck/collection/titles/battle-entry. No console error artifacts generated.
+- Added manual mobile viewport screenshots (390x844) for main and collection screens via Playwright.
+- Key UI review findings: low-contrast text in list/empty states, cramped filter controls in collection, and readability issues in booster fan stack.
+
+- Implemented sequential UI improvements accepted by user:
+  - Added global UI tokens and reusable button/panel classes in `src/app/globals.css`.
+  - Improved main/deck/titles screen contrast, spacing, and consistent button styling in `src/app/page.tsx`.
+  - Improved booster fan readability: only active pack shows detailed text, inactive packs show compact info in `src/components/booster/BoosterPackView.tsx`.
+  - Simplified collection filters with advanced toggle and added empty-state CTA actions in `src/components/collection/CardCollection.tsx`.
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Ran develop-web-game Playwright client once against `http://localhost:3000`.
+- Follow-up requested by user: completed (1) mobile touch/safe-area tuning and (2) collection filter presets (save/apply/delete + localStorage persistence).
+- Fixed lint rule `react-hooks/set-state-in-effect` by switching preset hydration to lazy `useState` initializer.
+- Re-verified with `npm run lint` and `npm run build` (both pass).
+
+- New request (Korean): upgrade booster effects to production-grade quality using motion library; improve pack list presentation and both tearing + card reveal effects.
+- Plan approved by user on 2026-02-13; implementing in `src/components/booster/BoosterPackView.tsx` with supporting animation token updates.
+- Refactored `src/components/booster/BoosterPackView.tsx` to production-style motion flow:
+  - Pack select list upgraded with focused fan layout, depth motion, metallic shine layers, and animated detail panel.
+  - Tearing stage replaced with staged cinematic sequence (`charge -> rip -> burst`) driven by motion timeline.
+  - Card reveal stage rebuilt with cinematic flash/focus effects and grade-driven emphasis timing.
+- Regression found during screenshot validation: unrevealed cards showed front face immediately due 3D face rendering behavior.
+- Fixed regression by switching reveal card from dual-face 3D visibility to stable AnimatePresence flip transition (back -> front).
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Ran `web_game_playwright_client` capture for booster route entry: `output/web-game/booster-prod/`.
+  - Ran manual Playwright booster flow captures (select/tearing/reveal/summary): `output/web-game/booster-prod-manual/`.
+- Follow-up polish pass accepted (`진행해`): focused on mobile quality and tearing richness.
+- Added compact breakpoint logic in booster view (`window.innerWidth < 640`) and tuned dimensions/motion for:
+  - fan pack cards,
+  - selected-pack detail panel,
+  - tearing overlay sizing,
+  - reveal card slot sizing and spacing.
+- Added tearing debris particles in `TearingOverlay` for stronger burst impact.
+- Fixed mobile alignment issue found in screenshot review by introducing centered X offset for fan cards.
+- Re-verified:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - New desktop/mobile captures: `output/web-game/booster-pass2-desktop/`, `output/web-game/booster-pass2-mobile/`.
+- Additional polish pass (`진행해` again): improved grade differentiation on reveal.
+- Added grade-specific cinematic overlays/particles during card front reveal:
+  - Hero/Legend conic light sweep overlay.
+  - Legend burst particles from card center.
+- Updated `전체 공개` sequencing to reveal low grade first and high grade last with grade-based delay for stronger climax.
+- Re-verified with `npm run lint`, `npm run build`, and mobile flow capture in `output/web-game/booster-pass3-mobile/`.
+- Added reveal SFX timing sync pass in `BoosterPackView`:
+  - grade-based sound delay (`revealSfxDelay`) to align flip and reveal audio per rarity.
+  - reveal-all mode state added and CTA label changes to `공개 중...` during sequencing.
+  - reset reveal-all mode when entering new reveal phase or returning to pack select.
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Ran web_game_playwright_client once (`output/web-game/booster-pass4/`).
+  - Ran supplemental Playwright mobile flow capture for reveal-all state (`output/web-game/booster-pass4-mobile-sfx.png`).
+
+- New request (2026-02-13): "전투 화면 분석 및 전략 판단 정보 중심 개선 포인트 도출".
+- Used develop-web-game workflow for runtime inspection attempt.
+- Ran Playwright client for battle entry (`output/web-game/battle-review-entry/`).
+- Runtime finding: current local state has no active deck, so battle arena UI was not reachable; captured empty-state screen instead.
+- Completed source-level battle UI/engine analysis (`BattleArena`, `battle-engine`, `types`, `cards`, `battlefield-events`) and prepared prioritized UX improvement points focused on situational awareness + strategic decision support.
+- Applied battle-screen strategy UX pass (except enemy tactic exposure per user request):
+  - Status effects now show icon + value + remaining turns in each warrior slot.
+  - Added always-visible win condition text in header (max turns + total HP tie-break rule).
+  - Added field-event applied-effect chips and "logic not applied" notices for effects currently not implemented in engine.
+  - Added tactic-phase target forecast panel (current-state targeting per lane/side).
+  - Added tactic selection prediction panel with expected outcomes and risk warnings (counter/nullify/fire-disable cases).
+  - Extended live log retention from 3/2s to 6/5s and adjusted fade timing.
+- Verification after changes:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+- User-reported hydration mismatch on main screen resolved.
+  - Root symptom: mismatch around active title badge button in `src/app/page.tsx`.
+  - Applied hydration guard using `useSyncExternalStore` (`isHydrated`) and render loading screen until hydration is complete.
+  - Verified by reproducing localStorage state with active title and checking Playwright console/page errors (none).
+- Continued battle mobile polish:
+  - Added command/intel stat row to warrior slot.
+  - Added total HP race display in battle header (player/enemy + diff).
+  - Compressed target forecast panel with side tabs (아군 공격 / 적군 공격).
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Mobile screenshots re-captured: `output/web-game/battle-mobile-review-v2/`.
+- Implemented previously un-applied battlefield effects in battle engine:
+  - `skip_front_first_turn`: front-lane units on turn 1 now skip action for both sides (new `forced_skip` action + live log/skill label in UI).
+  - `ambush_boost`: `t-ambush` now grants evasion to all alive allies instead of one target.
+- Synced battle UI with new logic:
+  - field-effect summary now marks both effects as applied (removed pending warning text).
+  - tactic preview for `매복` now reflects boosted-allies behavior under `ambush_boost`.
+  - target forecast now accounts for `skip_front_first_turn` and shows field-event forced skip.
+- Type update:
+  - Added `forced_skip` variant to `BattleAction` in `src/types/game.ts`.
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Playwright runtime scenario script attempted for forced field-event reproduction, but interaction timed out before entering battle flow; code-level verification completed.
+- Implemented tactic-level scaling so upgrades now affect battle outcomes.
+- Data/model changes:
+  - Added `BattleTactic` with `level` in `src/types/game.ts` and switched battle state tactic arrays to this type.
+  - Player tactics now carry owned level into battle; AI tactics now spawn with level near player average tactic level.
+- Engine changes (`src/lib/battle-engine.ts`):
+  - All tactic effects now scale with tactic level:
+    - fire: base damage 4 + (level-1), then multipliers.
+    - ambush: evasion duration scales (`1 + floor((level-1)/5)`), including ambush_boost all-allies behavior.
+    - chain: stun turns scale (`1 + floor((level-1)/6)`).
+    - taunt: taunt turns scale (`1 + floor((level-1)/6)`).
+    - heal: heal amount `5 + (level-1)`.
+    - buff: attack-up amount `3 + (level-1)` and duration `1 + floor((level-1)/6)`.
+    - rockfall: base damage `8 + (level-1)` before defense.
+    - counter reflect: reflected damage `3 + (counter level-1)`.
+- UI sync (`src/components/battle/BattleArena.tsx`):
+  - Tactic preview now reflects level-scaled values and enemy counter level.
+  - Tactic cards now display `Lv.N` badge for immediate readability.
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+- Fixed booster reveal-all flicker/new-refresh-like flashing behavior.
+- Root cause: `handleRevealAll` triggered `handleRevealCard` repeatedly with per-card flash/impact/focus side effects, causing multiple overlay/shake replays.
+- Fix in `src/components/booster/BoosterPackView.tsx`:
+  - Added one-shot bulk reveal path for reveal-all: single flash/impact/SFX event + single state update to reveal all pending cards simultaneously.
+  - Prevented per-card reveal handler while reveal-all mode is active.
+  - Removed now-unused reveal-step delay helper used only by old stagger path.
+- Verification:
+  - `npm run lint` passed.
+  - `npm run build` passed.
+  - Manual Playwright capture sequence produced immediate 0/5 -> 5/5 reveal transition without staged multi-flash loop (`output/web-game/booster-revealall-fix/`).

@@ -446,12 +446,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
           // Find which tactic index was used (player side only for card animation)
           let playerTacticIdx = -1;
           if (action.side === 'player') {
-            playerTacticIdx = finalState.player.tactics.findIndex(
-              (t, i) => {
-                const tc = getTacticById(t.cardId);
-                return tc && tc.name === action.tacticName && !tacticAnimRef.current[i];
-              }
-            );
+            playerTacticIdx = finalState.player.tactics.findIndex((t) => t.instanceId === action.tacticInstanceId);
             if (playerTacticIdx >= 0) {
               // Phase 1: Activation glow
               setTacticAnim(playerTacticIdx, 'activating');

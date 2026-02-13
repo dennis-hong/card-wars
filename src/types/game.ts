@@ -133,7 +133,7 @@ export interface BattleTactic {
 
 export type BattleAction =
   | { type: 'turn_start'; turn: number }
-  | { type: 'tactic_use'; side: 'player' | 'enemy'; tacticName: string; tacticEmoji: string; events: CombatEvent[]; log: string[] }
+  | { type: 'tactic_use'; side: 'player' | 'enemy'; tacticInstanceId: string; tacticName: string; tacticEmoji: string; events: CombatEvent[]; log: string[] }
   | { type: 'passive_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; log: string[] }
   | { type: 'active_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'ultimate_skill'; warriorId: string; cardId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
