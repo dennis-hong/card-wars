@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { OwnedCard, Deck, DeckSlot, Lane, Card, WarriorCard, GRADE_LABELS, GRADE_NAMES, GRADE_COLORS, FACTION_COLORS } from '@/types/game';
+import Image from 'next/image';
+import { OwnedCard, Deck, DeckSlot, Lane, WarriorCard, GRADE_LABELS, GRADE_NAMES, GRADE_COLORS, FACTION_COLORS } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
@@ -43,8 +44,13 @@ function getSynergyPreview(warriors: DeckSlot[], ownedCards: OwnedCard[]): { fac
 
 export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props) {
   const [deckName, setDeckName] = useState(deck?.name || '새 덱');
-  const [warriors, setWarriors] = useState<DeckSlot[]>(deck?.warriors || []);
-  const [tactics, setTactics] = useState<string[]>(deck?.tactics || []);
+  // Filter out stale slots where the owned card no longer exists
+  const [warriors, setWarriors] = useState<DeckSlot[]>(
+    (deck?.warriors || []).filter((w) => ownedCards.some((c) => c.instanceId === w.instanceId))
+  );
+  const [tactics, setTactics] = useState<string[]>(
+    (deck?.tactics || []).filter((t) => ownedCards.some((c) => c.instanceId === t))
+  );
   const [tab, setTab] = useState<Tab>('warriors');
   const [selectedLane, setSelectedLane] = useState<Lane>('front');
   const [previewCard, setPreviewCard] = useState<{ owned: OwnedCard; card: WarriorCard } | null>(null);
@@ -112,7 +118,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   const isValid = warriors.length === 3 && tactics.length <= 2 && new Set(warriors.map((w) => w.lane)).size === 3;
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
+    <div className="h-screen bg-gray-900 p-4 overflow-y-auto overscroll-contain pb-20">
       {/* Card Preview Popup */}
       {previewCard && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setPreviewCard(null)}>
@@ -122,7 +128,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
               const img = getWarriorImage(previewCard.card.id);
               return img ? (
                 <div className="w-full h-40 rounded-xl overflow-hidden mb-4 border-2" style={{ borderColor: GRADE_COLORS[previewCard.card.grade] }}>
-                  <img src={img} alt={previewCard.card.name} className="w-full h-full object-cover" />
+                  <Image src={img} alt={previewCard.card.name} width={320} height={160} className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-full h-32 rounded-xl bg-black/30 flex items-center justify-center mb-4 text-5xl">

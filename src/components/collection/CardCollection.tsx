@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { OwnedCard, Grade, Faction, GRADE_LABELS, GRADE_NAMES, GRADE_COLORS, MAX_LEVEL } from '@/types/game';
 import { getCardById, WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
@@ -10,11 +10,19 @@ import { SFX } from '@/lib/sound';
 interface Props {
   ownedCards: OwnedCard[];
   onEnhance: (instanceId: string) => boolean;
-  onMerge: (targetId: string, sourceId: string) => void;
   onBack: () => void;
 }
 
 type ViewMode = 'collection' | 'detail';
+type FilterPreset = {
+  id: string;
+  name: string;
+  filterType: 'all' | 'warrior' | 'tactic';
+  filterGrade: Grade | 0;
+  filterFaction: Faction | '전체';
+  sortBy: 'grade' | 'level' | 'attack' | 'name';
+};
+const FILTER_PRESET_KEY = 'collection-filter-presets-v1';
 
 // Grade-based effect colors
 const GRADE_EFFECT_COLORS: Record<Grade, { primary: string; glow: string; particle: string }> = {
@@ -24,13 +32,30 @@ const GRADE_EFFECT_COLORS: Record<Grade, { primary: string; glow: string; partic
   4: { primary: '#fbbf24', glow: 'rgba(251,191,36,0.5)', particle: '#f59e0b' },
 };
 
-export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack }: Props) {
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9999.17) * 10000;
+  return x - Math.floor(x);
+}
+
+export default function CardCollection({ ownedCards, onEnhance, onBack }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('collection');
   const [selectedCard, setSelectedCard] = useState<OwnedCard | null>(null);
   const [filterGrade, setFilterGrade] = useState<Grade | 0>(0);
   const [filterFaction, setFilterFaction] = useState<Faction | '전체'>('전체');
   const [filterType, setFilterType] = useState<'all' | 'warrior' | 'tactic'>('all');
   const [sortBy, setSortBy] = useState<'grade' | 'level' | 'attack' | 'name'>('grade');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [presets, setPresets] = useState<FilterPreset[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(FILTER_PRESET_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as FilterPreset[];
+      return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    } catch {
+      return [];
+    }
+  });
   const [enhanceEffect, setEnhanceEffect] = useState<{ grade: Grade; oldLevel: number; newLevel: number } | null>(null);
   const [cardFloat, setCardFloat] = useState(false);
 
@@ -114,6 +139,49 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
     }
   };
 
+  useEffect(() => {
+    localStorage.setItem(FILTER_PRESET_KEY, JSON.stringify(presets));
+  }, [presets]);
+
+  const resetFilters = useCallback(() => {
+    setFilterType('all');
+    setFilterGrade(0);
+    setFilterFaction('전체');
+    setSortBy('grade');
+    setShowAdvancedFilters(false);
+  }, []);
+
+  const saveCurrentPreset = () => {
+    const name = prompt('프리셋 이름을 입력하세요 (최대 12자)');
+    if (!name) return;
+    const trimmed = name.trim().slice(0, 12);
+    if (!trimmed) return;
+    const preset: FilterPreset = {
+      id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: trimmed,
+      filterType,
+      filterGrade,
+      filterFaction,
+      sortBy,
+    };
+    setPresets((prev) => [preset, ...prev].slice(0, 6));
+    SFX.buttonClick();
+  };
+
+  const applyPreset = (preset: FilterPreset) => {
+    SFX.buttonClick();
+    setFilterType(preset.filterType);
+    setFilterGrade(preset.filterGrade);
+    setFilterFaction(preset.filterFaction);
+    setSortBy(preset.sortBy);
+    setShowAdvancedFilters(true);
+  };
+
+  const deletePreset = (presetId: string) => {
+    SFX.buttonClick();
+    setPresets((prev) => prev.filter((p) => p.id !== presetId));
+  };
+
   // Total available for enhance (stored dupes + extra copies)
   const getEnhanceFuel = (oc: OwnedCard): number => {
     const extraCopies = (cardIdCounts[oc.cardId] || 1) - 1;
@@ -130,6 +198,14 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
     const isMaxLevel = selectedCard.level >= maxLvl;
     const enhanceable = !isMaxLevel && fuel > 0;
     const effectColors = GRADE_EFFECT_COLORS[card.grade as Grade];
+    const warriorStats = card.type === 'warrior'
+      ? {
+          attack: card.stats.attack + (selectedCard.level - 1),
+          command: card.stats.command + (selectedCard.level - 1),
+          intel: card.stats.intel + (selectedCard.level - 1),
+          defense: card.stats.defense + Math.floor((selectedCard.level - 1) * 0.5),
+        }
+      : null;
 
     return (
       <div className="min-h-screen bg-gray-900 p-4 relative overflow-hidden">
@@ -149,10 +225,10 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
             <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
               {Array.from({ length: 20 }).map((_, i) => {
                 const angle = (i / 20) * 360;
-                const dist = 60 + Math.random() * 100;
+                const dist = 60 + seededRandom(i + 1) * 100;
                 const dx = Math.cos((angle * Math.PI) / 180) * dist;
                 const dy = Math.sin((angle * Math.PI) / 180) * dist;
-                const size = 4 + Math.random() * 6;
+                const size = 4 + seededRandom(i + 101) * 6;
                 return (
                   <div
                     key={i}
@@ -173,7 +249,7 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
               {/* Star particles for legendary */}
               {enhanceEffect.grade === 4 && Array.from({ length: 8 }).map((_, i) => {
                 const angle = (i / 8) * 360;
-                const dist = 80 + Math.random() * 60;
+                const dist = 80 + seededRandom(i + 201) * 60;
                 const dx = Math.cos((angle * Math.PI) / 180) * dist;
                 const dy = Math.sin((angle * Math.PI) / 180) * dist;
                 return (
@@ -314,6 +390,34 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
               </div>
             </div>
 
+            {/* Stat effect explanation */}
+            {card.type === 'warrior' && (
+              <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
+                <div className="text-xs text-gray-400 mb-2 text-center">현재 레벨 능력치</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-red-400 font-bold">⚔️ 무력 {warriorStats?.attack}</span>
+                    <span className="text-gray-400">→ 공격 데미지</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-green-400 font-bold">🛡️ 통솔 {warriorStats?.command}</span>
+                    <span className="text-gray-400">→ HP (×3)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-400 font-bold">🧠 지력 {warriorStats?.intel}</span>
+                    <span className="text-gray-400">→ 스킬 위력</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-yellow-400 font-bold">🏰 방어 {warriorStats?.defense}</span>
+                    <span className="text-gray-400">→ 피해 감소</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-center text-gray-300 mt-2">
+                  예상 최대 HP: <span className="font-bold text-green-300">{(warriorStats?.command || 0) * 3}</span>
+                </div>
+              </div>
+            )}
+
             {/* Enhance fuel info */}
             <div className="bg-gray-700/50 rounded-lg p-3 mb-3 text-center">
               <div className="text-xs text-gray-400 mb-1">강화 재료 (중복 카드)</div>
@@ -382,7 +486,7 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
 
   // ─── Collection Grid ───
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
+    <div className="min-h-screen ui-page p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
       <style jsx>{`
         @keyframes enhanceBadgePulse {
           0%, 100% { transform: scale(1); opacity: 0.9; }
@@ -396,13 +500,13 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
 
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white">← 뒤로</button>
+        <button onClick={onBack} className="text-gray-300 text-sm hover:text-white min-h-10 px-2">← 뒤로</button>
         <h1 className="text-white font-bold">카드 수집</h1>
         <div className="text-sm text-yellow-400">{collectionRate}%</div>
       </div>
 
       {/* Collection progress */}
-      <div className="bg-gray-800/50 rounded-lg p-3 mb-4">
+      <div className="ui-panel rounded-lg p-3 mb-4">
         <div className="flex justify-between text-xs text-gray-400 mb-1">
           <span>수집 진행도</span>
           <span>{ownedCardIds.size}/{allCardIds.size}</span>
@@ -419,15 +523,15 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
       <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
         <button
           onClick={() => setFilterType('all')}
-          className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterType === 'all' ? 'bg-white text-black' : 'bg-gray-700 text-gray-300'}`}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterType === 'all' ? 'bg-white text-black' : 'bg-gray-700 text-gray-200'}`}
         >전체</button>
         <button
           onClick={() => setFilterType('warrior')}
-          className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterType === 'warrior' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterType === 'warrior' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}
         >무장</button>
         <button
           onClick={() => setFilterType('tactic')}
-          className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterType === 'tactic' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterType === 'tactic' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-200'}`}
         >전법</button>
       </div>
 
@@ -436,36 +540,83 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
           <button
             key={g}
             onClick={() => setFilterGrade(g)}
-            className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterGrade === g ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+            className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterGrade === g ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-200'}`}
           >
             {g === 0 ? '등급' : GRADE_LABELS[g]}
           </button>
         ))}
       </div>
 
-      {filterType !== 'tactic' && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-          {(['전체', '위', '촉', '오', '군벌'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilterFaction(f)}
-              className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filterFaction === f ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-            >{f}</button>
-          ))}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowAdvancedFilters((prev) => !prev)}
+          className="text-xs text-blue-300 hover:text-blue-200 font-semibold min-h-9 px-1"
+        >
+          {showAdvancedFilters ? '고급 필터 숨기기' : '고급 필터 보기'}
+        </button>
+      </div>
+
+      <div className="ui-panel rounded-xl p-3 mb-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] text-gray-200 font-semibold">필터 프리셋</div>
+          <button
+            onClick={saveCurrentPreset}
+            className="ui-btn ui-btn-neutral px-2.5 py-1.5 text-[11px]"
+          >
+            현재 필터 저장
+          </button>
+        </div>
+        {presets.length === 0 ? (
+          <div className="text-[11px] text-gray-400">저장된 프리셋이 없습니다.</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {presets.map((preset) => (
+              <div key={preset.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => applyPreset(preset)}
+                  className="ui-btn px-2.5 py-1.5 text-[11px] bg-slate-700 text-slate-100 border border-slate-500/40"
+                >
+                  {preset.name}
+                </button>
+                <button
+                  onClick={() => deletePreset(preset.id)}
+                  className="ui-btn px-1.5 py-1 text-[10px] bg-red-900/70 text-red-100 border border-red-600/40"
+                  aria-label={`${preset.name} 삭제`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showAdvancedFilters && (
+        <div className="ui-panel rounded-xl p-3 mb-4 space-y-3">
+          {filterType !== 'tactic' && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {(['전체', '위', '촉', '오', '군벌'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilterFaction(f)}
+                  className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterFaction === f ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200'}`}
+                >{f}</button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 items-center">
+            <span className="text-[10px] text-gray-300">정렬:</span>
+            {([['grade', '등급'], ['level', '레벨'], ['attack', '무력'], ['name', '이름']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={`px-2.5 py-1 rounded text-[10px] font-bold min-h-8 ${sortBy === key ? 'bg-amber-600 text-white' : 'bg-gray-700/70 text-gray-200'}`}
+              >{label}</button>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* Sort */}
-      <div className="flex gap-2 mb-4 items-center">
-        <span className="text-[10px] text-gray-500">정렬:</span>
-        {([['grade', '등급'], ['level', '레벨'], ['attack', '무력'], ['name', '이름']] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setSortBy(key)}
-            className={`px-2 py-0.5 rounded text-[10px] font-bold ${sortBy === key ? 'bg-amber-600 text-white' : 'bg-gray-700/50 text-gray-400'}`}
-          >{label}</button>
-        ))}
-      </div>
 
       {/* Card grid with enhance badges */}
       <div className="flex flex-wrap gap-2 justify-center">
@@ -514,7 +665,30 @@ export default function CardCollection({ ownedCards, onEnhance, onMerge, onBack 
       </div>
 
       {filteredCards.length === 0 && (
-        <div className="text-center text-gray-500 mt-8">해당하는 카드가 없습니다.</div>
+        <div className="ui-panel rounded-xl p-5 text-center text-gray-300 mt-8 max-w-sm mx-auto">
+          <div className="font-semibold text-gray-100 mb-2">해당하는 카드가 없습니다.</div>
+          <div className="text-xs text-gray-300 mb-4">필터를 초기화하거나 다른 카테고리를 선택해보세요.</div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => {
+                SFX.buttonClick();
+                resetFilters();
+              }}
+              className="ui-btn ui-btn-primary px-3 py-2 text-xs"
+            >
+              필터 초기화
+            </button>
+            <button
+              onClick={() => {
+                SFX.buttonClick();
+                onBack();
+              }}
+              className="ui-btn ui-btn-neutral px-3 py-2 text-xs"
+            >
+              메인으로
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

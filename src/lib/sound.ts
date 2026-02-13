@@ -2,17 +2,10 @@
 // Sound Effects - ElevenLabs generated MP3s
 // ============================================================
 
-const cache = new Map<string, HTMLAudioElement>();
-
 function play(path: string, volume = 0.7) {
   try {
-    let audio = cache.get(path);
-    if (!audio) {
-      audio = new Audio(path);
-      cache.set(path, audio);
-    }
+    const audio = new Audio(path);
     audio.volume = volume;
-    audio.currentTime = 0;
     audio.play().catch(() => {});
   } catch {
     // silent fail

@@ -39,6 +39,15 @@ function loadState(): GameState {
       if (parsed.stats && parsed.stats.maxStreak === undefined) {
         parsed.stats.maxStreak = parsed.stats.streak || 0;
       }
+      // Clean stale deck references
+      if (parsed.decks && parsed.ownedCards) {
+        const ownedIds = new Set((parsed.ownedCards as OwnedCard[]).map((c: OwnedCard) => c.instanceId));
+        parsed.decks = (parsed.decks as Deck[]).map((d: Deck) => ({
+          ...d,
+          warriors: d.warriors.filter((w) => ownedIds.has(w.instanceId)),
+          tactics: d.tactics.filter((t) => ownedIds.has(t)),
+        }));
+      }
       return parsed;
     }
   } catch { /* ignore */ }
@@ -50,6 +59,15 @@ function saveState(state: GameState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch { /* ignore */ }
+}
+
+// Remove stale deck references when a card is removed from ownedCards
+function cleanDecksAfterRemoval(decks: Deck[], removedInstanceId: string): Deck[] {
+  return decks.map((deck) => ({
+    ...deck,
+    warriors: deck.warriors.filter((w) => w.instanceId !== removedInstanceId),
+    tactics: deck.tactics.filter((t) => t !== removedInstanceId),
+  }));
 }
 
 function getCollectionRate(ownedCards: OwnedCard[]): number {
@@ -69,42 +87,41 @@ function checkNewTitles(state: GameState): string[] {
 }
 
 export function useGameState() {
-  const [state, setState] = useState<GameState>(createInitialState);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<GameState>(() => loadState());
+  const [loaded] = useState(true);
   const [newTitleIds, setNewTitleIds] = useState<string[]>([]);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const s = loadState();
-    setState(s);
-    setLoaded(true);
-  }, []);
 
   // Save on every change (after initial load)
   useEffect(() => {
     if (loaded) saveState(state);
   }, [state, loaded]);
 
-  // Check for new titles whenever state changes
-  useEffect(() => {
-    if (!loaded) return;
-    const newTitles = checkNewTitles(state);
-    if (newTitles.length > 0) {
-      setNewTitleIds(newTitles);
-      setState((prev) => ({
-        ...prev,
-        earnedTitles: [...prev.earnedTitles, ...newTitles],
-        activeTitle: prev.activeTitle || newTitles[newTitles.length - 1],
-      }));
-    }
-  }, [state.stats, state.ownedCards, loaded]);
-
   const dismissNewTitles = useCallback(() => {
     setNewTitleIds([]);
   }, []);
 
   const updateState = useCallback((updater: (prev: GameState) => GameState) => {
-    setState((prev) => updater(prev));
+    setState((prev) => {
+      const next = updater(prev);
+      const newTitles = checkNewTitles(next);
+      if (newTitles.length === 0) return next;
+
+      queueMicrotask(() => {
+        setNewTitleIds((current) => {
+          const merged = [...current];
+          for (const id of newTitles) {
+            if (!merged.includes(id)) merged.push(id);
+          }
+          return merged;
+        });
+      });
+
+      return {
+        ...next,
+        earnedTitles: [...next.earnedTitles, ...newTitles],
+        activeTitle: next.activeTitle || newTitles[newTitles.length - 1],
+      };
+    });
   }, []);
 
   const setActiveTitle = useCallback((titleId: string | null) => {
@@ -211,6 +228,7 @@ export function useGameState() {
                 ? { ...c, level: c.level + 1 }
                 : c
             ),
+          decks: cleanDecksAfterRemoval(prev.decks, donor.instanceId),
         };
       }
 
@@ -239,6 +257,7 @@ export function useGameState() {
           return c;
         })
         .filter((c) => c.instanceId !== sourceId),
+      decks: cleanDecksAfterRemoval(prev.decks, sourceId),
     }));
   }, [updateState]);
 

@@ -9,6 +9,7 @@ import {
   StatusEffect,
   CombatEvent,
   BattleAction,
+  BattleTactic,
   Grade,
 } from '@/types/game';
 import { getWarriorById, getTacticById, WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
@@ -56,6 +57,7 @@ function createBattleWarrior(
   return {
     instanceId,
     cardId,
+    level,
     lane,
     currentHp: hp,
     maxHp: hp,
@@ -73,36 +75,50 @@ export function initBattle(
 ): BattleState {
   const fieldEvent = getRandomEvent();
 
-  // Build player warriors
-  const playerWarriors = playerDeck.warriors.map((slot) => {
+  // Build player warriors (skip stale slots where owned card no longer exists)
+  const validSlots = playerDeck.warriors.filter((slot) => {
     const owned = ownedCards.find((c) => c.instanceId === slot.instanceId);
-    return createBattleWarrior(
-      slot.instanceId,
-      owned?.cardId || '',
-      slot.lane,
-      owned?.level || 1,
-      fieldEvent
+    return owned && getWarriorById(owned.cardId);
+  });
+
+  const playerWarriors: BattleWarrior[] = [];
+  for (const slot of validSlots) {
+    const owned = ownedCards.find((c) => c.instanceId === slot.instanceId);
+    if (!owned) continue;
+    const card = getWarriorById(owned.cardId);
+    if (!card) continue;
+    playerWarriors.push(
+      createBattleWarrior(slot.instanceId, owned.cardId, slot.lane, owned.level, fieldEvent)
     );
-  });
+  }
 
-  // Build player tactics
-  const playerTactics = playerDeck.tactics.map((tid) => {
-    const owned = ownedCards.find((c) => c.instanceId === tid);
-    return { instanceId: tid, cardId: owned?.cardId || '', used: false };
-  });
+  // Build player tactics (skip stale references)
+  const playerTactics = playerDeck.tactics
+    .filter((tid) => ownedCards.some((c) => c.instanceId === tid))
+    .map((tid) => {
+      const owned = ownedCards.find((c) => c.instanceId === tid)!;
+      return { instanceId: tid, cardId: owned.cardId, level: owned.level, used: false };
+    });
 
-  // Compute player deck info for AI matching
-  const deckCards = playerDeck.warriors.map((slot) => {
-    const owned = ownedCards.find((c) => c.instanceId === slot.instanceId);
-    const card = owned ? getWarriorById(owned.cardId) : null;
+  // Compute player deck info for AI matching (use validated warriors only)
+  const deckCards = playerWarriors.map((w) => {
+    const card = getWarriorById(w.cardId);
+    const owned = ownedCards.find((c) => c.instanceId === w.instanceId);
     return { grade: (card?.grade || 1) as Grade, level: owned?.level || 1 };
   });
-  const playerMaxGrade = Math.max(...deckCards.map((c) => c.grade)) as Grade;
-  const playerAvgLevel = deckCards.reduce((sum, c) => sum + c.level, 0) / deckCards.length;
+  const playerMaxGrade = (deckCards.length > 0
+    ? Math.max(...deckCards.map((c) => c.grade))
+    : 1) as Grade;
+  const playerAvgLevel = deckCards.length > 0
+    ? deckCards.reduce((sum, c) => sum + c.level, 0) / deckCards.length
+    : 1;
 
   // Build AI enemy - matched to player strength
   const enemyWarriors = buildAITeam(fieldEvent, playerMaxGrade, playerAvgLevel, wins);
-  const enemyTactics = buildAITactics();
+  const avgTacticLevel = playerTactics.length > 0
+    ? playerTactics.reduce((sum, t) => sum + t.level, 0) / playerTactics.length
+    : 1;
+  const enemyTactics = buildAITactics(avgTacticLevel);
 
   // Apply faction synergy and collect synergy info
   const playerSynergies = applyFactionSynergy(playerWarriors).map(s => ({ ...s, side: 'player' as const }));
@@ -130,6 +146,7 @@ export function initBattle(
     fieldEvent,
     log: [
       `⚡ 전장 이벤트: ${fieldEvent.name} - ${fieldEvent.description}`,
+      `\n──── 턴 1 ────`,
     ],
     result: null,
     combatEvents: [],
@@ -195,13 +212,16 @@ function buildAITeam(
   return picked;
 }
 
-function buildAITactics() {
+function buildAITactics(playerAvgTacticLevel: number) {
   const pool = [...TACTIC_CARDS];
-  const tactics = [];
+  const tactics: BattleTactic[] = [];
+  const minLevel = Math.max(1, Math.floor(playerAvgTacticLevel) - 1);
+  const maxLevel = Math.max(minLevel, Math.floor(playerAvgTacticLevel) + 1);
   for (let i = 0; i < 2; i++) {
     const idx = Math.floor(Math.random() * pool.length);
     const card = pool.splice(idx, 1)[0];
-    tactics.push({ instanceId: generateId(), cardId: card.id, used: false });
+    const level = minLevel + Math.floor(Math.random() * (maxLevel - minLevel + 1));
+    tactics.push({ instanceId: generateId(), cardId: card.id, level, used: false });
   }
   return tactics;
 }
@@ -294,24 +314,26 @@ function applyBattleStartSkills(state: BattleState, side: 'player' | 'enemy', lo
 
     // 대의 (Sun Quan passive) - 오 세력 방어+1
     if (card.id === 'w-sun-quan') {
+      const bonus = 1 + Math.floor((w.level - 1) / 6);
       team.warriors.forEach((ally) => {
         if (getWarriorById(ally.cardId)?.faction === '오' && ally.isAlive) {
-          ally.stats.defense += 1;
+          ally.stats.defense += bonus;
         }
       });
-      log.push(`🛡️ ${card.name} 대의 발동! 오 세력 방어+1`);
+      log.push(`🛡️ ${card.name} 대의 발동! 오 세력 방어+${bonus}`);
     }
 
     // 폭정 (Dong Zhuo active) - 적 전체 통솔-2
     if (card.id === 'w-dong-zhuo') {
+      const down = 2 + Math.floor((w.level - 1) / 6);
       opponent.warriors.forEach((e) => {
         if (e.isAlive) {
-          e.stats.command = Math.max(1, e.stats.command - 2);
+          e.stats.command = Math.max(1, e.stats.command - down);
           e.maxHp = e.stats.command * 3;
           e.currentHp = Math.min(e.currentHp, e.maxHp);
         }
       });
-      log.push(`😈 ${card.name} 폭정 발동! 적 전체 통솔-2`);
+      log.push(`😈 ${card.name} 폭정 발동! 적 전체 통솔-${down}`);
     }
 
     // 용병술 (Sun Quan active) - 전법 카드 추가 사용 가능 (전투 시작 시 전법 1장 추가)
@@ -339,6 +361,10 @@ function getFirstAlive(warriors: BattleWarrior[]): BattleWarrior | undefined {
     if (w) return w;
   }
   return undefined;
+}
+
+function hasAliveWarrior(warriors: BattleWarrior[]): boolean {
+  return warriors.some((w) => w.isAlive);
 }
 
 function hasStatus(warrior: BattleWarrior, type: StatusEffect['type']): boolean {
@@ -385,6 +411,7 @@ export function applyTactic(
   if (tacticIndex < 0 || tacticIndex >= actor.tactics.length) return { state: newState, action: null };
   const tactic = actor.tactics[tacticIndex];
   if (tactic.used) return { state: newState, action: null };
+  const tacticLevel = Math.max(1, tactic.level || 1);
 
   const tacticCard = getTacticById(tactic.cardId);
   if (!tacticCard) return { state: newState, action: null };
@@ -438,7 +465,7 @@ export function applyTactic(
 
   switch (tacticCard.id) {
     case 't-fire': {
-      let dmg = 4;
+      let dmg = 4 + (tacticLevel - 1);
       if (state.fieldEvent.effect === 'fire_boost') dmg *= 2;
       const hasZhouYu = actor.warriors.some(
         (w) => w.cardId === 'w-zhou-yu' && w.isAlive
@@ -458,20 +485,34 @@ export function applyTactic(
       break;
     }
     case 't-ambush': {
-      const target = getFirstAlive(actor.warriors);
-      if (target) {
-        target.statusEffects.push({ type: 'evasion', value: 1, turnsLeft: 1 });
-        const msg = `🌿 ${sideLabel} 매복! ${getWarriorById(target.cardId)?.name} 회피 부여`;
+      const aliveAllies = actor.warriors.filter((w) => w.isAlive);
+      if (aliveAllies.length === 0) break;
+      const evasionTurns = 1 + Math.floor((tacticLevel - 1) / 5);
+
+      if (state.fieldEvent.effect === 'ambush_boost') {
+        aliveAllies.forEach((ally) => {
+          ally.statusEffects.push({ type: 'evasion', value: 1, turnsLeft: evasionTurns });
+        });
+        const msg = `🌿 ${sideLabel} 매복 강화! 아군 전체 회피 ${evasionTurns}턴`;
         newState.log.push(msg);
         logLines.push(msg);
+      } else {
+        const target = getFirstAlive(actor.warriors);
+        if (target) {
+          target.statusEffects.push({ type: 'evasion', value: 1, turnsLeft: evasionTurns });
+          const msg = `🌿 ${sideLabel} 매복! ${getWarriorById(target.cardId)?.name} 회피 ${evasionTurns}턴`;
+          newState.log.push(msg);
+          logLines.push(msg);
+        }
       }
       break;
     }
     case 't-chain': {
       const target = getFirstAlive(opponent.warriors);
       if (target) {
-        target.statusEffects.push({ type: 'stun', value: 1, turnsLeft: 1 });
-        const msg = `⛓️ ${sideLabel} 연환계! ${getWarriorById(target.cardId)?.name} 행동불가`;
+        const stunTurns = 1 + Math.floor((tacticLevel - 1) / 6);
+        target.statusEffects.push({ type: 'stun', value: 1, turnsLeft: stunTurns });
+        const msg = `⛓️ ${sideLabel} 연환계! ${getWarriorById(target.cardId)?.name} ${stunTurns}턴 행동불가`;
         newState.log.push(msg);
         logLines.push(msg);
       }
@@ -480,8 +521,9 @@ export function applyTactic(
     case 't-taunt': {
       const front = getAliveByLane(actor.warriors, 'front');
       if (front) {
-        front.statusEffects.push({ type: 'taunt', value: 1, turnsLeft: 1 });
-        const msg = `😤 ${sideLabel} 도발! 적 공격이 전위에 집중`;
+        const tauntTurns = 1 + Math.floor((tacticLevel - 1) / 6);
+        front.statusEffects.push({ type: 'taunt', value: 1, turnsLeft: tauntTurns });
+        const msg = `😤 ${sideLabel} 도발! 적 공격이 전위에 ${tauntTurns}턴 집중`;
         newState.log.push(msg);
         logLines.push(msg);
       }
@@ -489,11 +531,12 @@ export function applyTactic(
     }
     case 't-heal': {
       const aliveAllies = actor.warriors.filter((w) => w.isAlive);
+      if (aliveAllies.length === 0) break;
       const lowest = aliveAllies.reduce((a, b) =>
         (a.currentHp / a.maxHp) < (b.currentHp / b.maxHp) ? a : b
       );
       if (lowest) {
-        const heal = 5;
+        const heal = 5 + (tacticLevel - 1);
         lowest.currentHp = Math.min(lowest.maxHp, lowest.currentHp + heal);
         events.push({
           type: 'heal',
@@ -509,8 +552,10 @@ export function applyTactic(
     case 't-buff': {
       const target = getFirstAlive(actor.warriors);
       if (target) {
-        target.statusEffects.push({ type: 'attack_up', value: 3, turnsLeft: 1 });
-        const msg = `⬆️ ${sideLabel} 강화! ${getWarriorById(target.cardId)?.name} 무력+3`;
+        const buffValue = 3 + (tacticLevel - 1);
+        const buffTurns = 1 + Math.floor((tacticLevel - 1) / 6);
+        target.statusEffects.push({ type: 'attack_up', value: buffValue, turnsLeft: buffTurns });
+        const msg = `⬆️ ${sideLabel} 강화! ${getWarriorById(target.cardId)?.name} 무력+${buffValue} (${buffTurns}턴)`;
         newState.log.push(msg);
         logLines.push(msg);
       }
@@ -519,7 +564,7 @@ export function applyTactic(
     case 't-rockfall': {
       const target = getFirstAlive(opponent.warriors);
       if (target) {
-        const dmg = 8;
+        const dmg = 8 + (tacticLevel - 1);
         applyDamage(target, dmg - target.stats.defense, events, true);
         const msg = `🪨 ${sideLabel} 낙석! ${getWarriorById(target.cardId)?.name}에게 ${dmg} 데미지`;
         newState.log.push(msg);
@@ -541,7 +586,7 @@ export function applyTactic(
     const msg = `🔄 반계 발동! 전법이 반사됨!`;
     newState.log.push(msg);
     logLines.push(msg);
-    const reflectedDmg = 3;
+    const reflectedDmg = 3 + (opponent.tactics[counterIdx].level - 1);
     actor.warriors.filter((w) => w.isAlive).forEach((w) => {
       applyDamage(w, reflectedDmg, events, true);
     });
@@ -564,6 +609,18 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
   const actions: BattleAction[] = [];
   const allEvents: CombatEvent[] = [];
 
+  // Tactics can already end the battle (e.g. 화공 wipes).
+  if (!hasAliveWarrior(newState.player.warriors) || !hasAliveWarrior(newState.enemy.warriors)) {
+    const result = hasAliveWarrior(newState.enemy.warriors) ? 'lose' : 'win';
+    newState.result = result;
+    newState.phase = 'result';
+    const msg = result === 'win' ? '🎉 승리! 적 전멸!' : '💀 패배... 아군 전멸...';
+    newState.log.push(msg);
+    actions.push({ type: 'turn_end', newTurn: newState.turn, phase: 'result', result, log: [msg] });
+    newState.combatEvents = allEvents;
+    return { state: newState, actions };
+  }
+
   // Turn start action
   actions.push({ type: 'turn_start', turn: newState.turn });
 
@@ -583,7 +640,13 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
   for (const lane of order) {
     // Player attacks
     const pWarrior = getAliveByLane(newState.player.warriors, lane);
-    if (pWarrior && !hasStatus(pWarrior, 'stun')) {
+    const pFieldSkip = !!(pWarrior && lane === 'front' && newState.turn === 1 && newState.fieldEvent.effect === 'skip_front_first_turn');
+    if (pWarrior && pFieldSkip) {
+      const name = getWarriorById(pWarrior.cardId)?.name || '';
+      const msg = `🌙 ${name} 야간 기습 영향으로 1턴 행동 불가`;
+      newState.log.push(msg);
+      actions.push({ type: 'forced_skip', warriorId: pWarrior.instanceId, warriorName: name, side: 'player', reason: 'field_event', log: [msg] });
+    } else if (pWarrior && !hasStatus(pWarrior, 'stun')) {
       const target = findTarget(newState.enemy.warriors, pWarrior);
       if (target) {
         performAttack(newState, pWarrior, target, 'player', allEvents, actions);
@@ -597,7 +660,13 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
 
     // Enemy attacks
     const eWarrior = getAliveByLane(newState.enemy.warriors, lane);
-    if (eWarrior && !hasStatus(eWarrior, 'stun')) {
+    const eFieldSkip = !!(eWarrior && lane === 'front' && newState.turn === 1 && newState.fieldEvent.effect === 'skip_front_first_turn');
+    if (eWarrior && eFieldSkip) {
+      const name = getWarriorById(eWarrior.cardId)?.name || '';
+      const msg = `🌙 ${name} 야간 기습 영향으로 1턴 행동 불가`;
+      newState.log.push(msg);
+      actions.push({ type: 'forced_skip', warriorId: eWarrior.instanceId, warriorName: name, side: 'enemy', reason: 'field_event', log: [msg] });
+    } else if (eWarrior && !hasStatus(eWarrior, 'stun')) {
       const target = findTarget(newState.player.warriors, eWarrior);
       if (target) {
         performAttack(newState, eWarrior, target, 'enemy', allEvents, actions);
@@ -620,8 +689,9 @@ export function resolveCombat(state: BattleState): { state: BattleState; actions
   // Apply 은인자중 (Sima Yi passive) - defense+1 at end of turn
   [...newState.player.warriors, ...newState.enemy.warriors].forEach((w) => {
     if (w.cardId === 'w-sima-yi' && w.isAlive) {
-      w.stats.defense += 1;
-      newState.log.push(`🏰 ${getWarriorById(w.cardId)?.name} 은인자중 발동! 방어+1`);
+      const bonus = 1 + Math.floor((w.level - 1) / 8);
+      w.stats.defense += bonus;
+      newState.log.push(`🏰 ${getWarriorById(w.cardId)?.name} 은인자중 발동! 방어+${bonus}`);
       allEvents.push({
         type: 'skill',
         targetInstanceId: w.instanceId,
@@ -891,14 +961,15 @@ function applyActiveSkills(state: BattleState, side: 'player' | 'enemy', events:
       // 조조 패왕의 기세 - 아군 전체 무력+2 (턴 시작 시 30%)
       case 'w-cao-cao': {
         if (Math.random() < 0.3) {
+          const bonus = 2 + Math.floor((w.level - 1) / 6);
           team.warriors.forEach((ally) => {
             if (ally.isAlive) {
-              ally.stats.attack += 2;
+              ally.stats.attack += bonus;
             }
           });
           skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '패왕의 기세' });
           events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '패왕의 기세' });
-          const msg = `👑 ${card.name} 패왕의 기세 발동! 아군 전체 무력+2`;
+          const msg = `👑 ${card.name} 패왕의 기세 발동! 아군 전체 무력+${bonus}`;
           state.log.push(msg);
           skillLog.push(msg);
         }
@@ -925,11 +996,12 @@ function applyActiveSkills(state: BattleState, side: 'player' | 'enemy', events:
       // 서황 철벽수비 - HP 50% 이하일 때 방어+2
       case 'w-xu-huang': {
         if (w.currentHp / w.maxHp <= 0.5) {
-          w.statusEffects.push({ type: 'defense_up', value: 2, turnsLeft: 1 });
-          w.stats.defense += 2;
+          const bonus = 2 + Math.floor((w.level - 1) / 6);
+          w.statusEffects.push({ type: 'defense_up', value: bonus, turnsLeft: 1 });
+          w.stats.defense += bonus;
           skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '철벽수비' });
           events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '철벽수비' });
-          const msg = `🛡️ ${card.name} 철벽수비 발동! 방어+2`;
+          const msg = `🛡️ ${card.name} 철벽수비 발동! 방어+${bonus}`;
           state.log.push(msg);
           skillLog.push(msg);
         }
@@ -939,9 +1011,9 @@ function applyActiveSkills(state: BattleState, side: 'player' | 'enemy', events:
       // 유비 인덕 - 아군 전체 HP+3 회복 (턴 시작 시 30%)
       case 'w-liu-bei': {
         if (Math.random() < 0.3) {
+          const heal = 3 + Math.floor((w.level - 1) / 5);
           team.warriors.forEach((ally) => {
             if (ally.isAlive) {
-              const heal = 3;
               ally.currentHp = Math.min(ally.maxHp, ally.currentHp + heal);
               skillEvents.push({ type: 'heal', targetInstanceId: ally.instanceId, value: heal });
               events.push({ type: 'heal', targetInstanceId: ally.instanceId, value: heal });
@@ -949,7 +1021,7 @@ function applyActiveSkills(state: BattleState, side: 'player' | 'enemy', events:
           });
           skillEvents.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '인덕' });
           events.push({ type: 'skill', targetInstanceId: w.instanceId, skillName: '인덕' });
-          const msg = `💚 ${card.name} 인덕 발동! 아군 전체 HP+3 회복`;
+          const msg = `💚 ${card.name} 인덕 발동! 아군 전체 HP+${heal} 회복`;
           state.log.push(msg);
           skillLog.push(msg);
         }
@@ -1065,7 +1137,7 @@ function applyPassiveSkills(state: BattleState, side: 'player' | 'enemy', events
 
     // 위풍당당 (Zhang Liao) - front lane attack+3
     if (card.id === 'w-zhang-liao' && w.lane === 'front') {
-      w.stats.attack = w.baseStats.attack + 3;
+      w.stats.attack = Math.max(w.stats.attack, w.baseStats.attack + 3);
       events.push({
         type: 'skill',
         targetInstanceId: w.instanceId,
@@ -1084,7 +1156,7 @@ function applyPassiveSkills(state: BattleState, side: 'player' | 'enemy', events
     if (card.id === 'w-guan-yu') {
       const hasLiuBei = team.warriors.some((t) => t.cardId === 'w-liu-bei' && t.isAlive);
       if (hasLiuBei) {
-        w.stats.attack = w.baseStats.attack + 2;
+        w.stats.attack = Math.max(w.stats.attack, w.baseStats.attack + 2);
         events.push({
           type: 'skill',
           targetInstanceId: w.instanceId,
@@ -1147,6 +1219,7 @@ function checkUltimateSkills(state: BattleState, side: 'player' | 'enemy', event
     // Ultimates trigger at turn 2+ when HP <= 50%
     if (state.turn < 2) return;
     if (w.currentHp / w.maxHp > 0.5) return;
+    if (hasStatus(w, 'ultimate_used')) return;
 
     const ultEvents: CombatEvent[] = [];
     const ultLog: string[] = [];
@@ -1219,6 +1292,7 @@ function checkUltimateSkills(state: BattleState, side: 'player' | 'enemy', event
     }
 
     if (ultLog.length > 0) {
+      w.statusEffects.push({ type: 'ultimate_used', value: 1, turnsLeft: 99 });
       actions.push({
         type: 'ultimate_skill',
         warriorId: w.instanceId,
@@ -1243,9 +1317,10 @@ export function selectAITactic(state: BattleState): number | null {
 
   if (available.length === 0) return null;
 
-  const enemyHealthRatio =
-    state.enemy.warriors.reduce((sum, w) => sum + w.currentHp, 0) /
-    state.enemy.warriors.reduce((sum, w) => sum + w.maxHp, 0);
+  const enemyMaxHp = state.enemy.warriors.reduce((sum, w) => sum + w.maxHp, 0);
+  const enemyHealthRatio = enemyMaxHp > 0
+    ? state.enemy.warriors.reduce((sum, w) => sum + w.currentHp, 0) / enemyMaxHp
+    : 0;
 
   if (enemyHealthRatio < 0.5) {
     const defensive = available.find((t) =>

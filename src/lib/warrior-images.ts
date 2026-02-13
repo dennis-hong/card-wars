@@ -16,7 +16,7 @@ const WARRIOR_IMAGES: Record<string, string> = {
   'w-gan-ning': '/images/warriors/gan-ning.png',
   'w-pang-de': '/images/warriors/pang-de.png',
   'w-dong-zhuo': '/images/warriors/dong-zhuo.png',
-  'w-qi-ling': '/images/warriors/qi-ling.png',
+  'w-ji-ling': '/images/warriors/qi-ling.png',
   'w-wen-chou': '/images/warriors/wen-chou.png',
   'w-chen-lan': '/images/warriors/chen-lan.png',
   'w-pan-zhang': '/images/warriors/pan-zhang.png',

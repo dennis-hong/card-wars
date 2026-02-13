@@ -50,19 +50,19 @@ export default function TacticCardView({ card, owned, size = 'md', onClick, sele
       </div>
 
       {/* Emoji icon */}
-      <div className="flex items-center justify-center mt-2">
-        <span className={size === 'lg' ? 'text-5xl' : 'text-4xl'}>{card.emoji}</span>
+      <div className={`flex items-center justify-center bg-black/20 rounded mx-2 ${size === 'sm' ? 'mt-1 py-1' : 'mt-2 py-2'}`}>
+        <span className={size === 'lg' ? 'text-5xl' : size === 'md' ? 'text-4xl' : 'text-3xl'}>{card.emoji}</span>
       </div>
 
       {/* Description */}
-      <div className={`px-2 mt-2 text-center text-gray-300 leading-tight ${size === 'lg' ? 'text-sm' : size === 'md' ? 'text-xs' : ''}`}>
+      <div className={`px-2 mt-1.5 text-center text-gray-300 leading-tight line-clamp-2 ${size === 'lg' ? 'text-sm' : size === 'md' ? 'text-xs' : 'text-[9px]'}`}>
         {card.description}
       </div>
 
       {/* Base stat */}
       {card.baseStat !== 'none' && (
-        <div className={`absolute bottom-1 left-0 right-0 text-center text-gray-500 ${size === 'sm' ? 'text-[9px]' : 'text-xs'}`}>
-          기반: {card.baseStat}
+        <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 ${size === 'sm' ? 'text-[8px] px-1.5 py-0' : 'text-[10px] px-2 py-0.5'} bg-white/10 text-gray-400 rounded-full border border-white/10 whitespace-nowrap`}>
+          {card.baseStat}
         </div>
       )}
 

@@ -95,6 +95,7 @@ export interface BattleFieldEvent {
 export interface BattleWarrior {
   instanceId: string;
   cardId: string;
+  level: number;
   lane: Lane;
   currentHp: number;
   maxHp: number;
@@ -105,7 +106,7 @@ export interface BattleWarrior {
 }
 
 export interface StatusEffect {
-  type: 'stun' | 'defense_up' | 'attack_up' | 'intel_down' | 'defense_stack' | 'evasion' | 'taunt' | 'command_down' | 'tactic_nullify' | 'back_attack';
+  type: 'stun' | 'defense_up' | 'attack_up' | 'intel_down' | 'defense_stack' | 'evasion' | 'taunt' | 'command_down' | 'tactic_nullify' | 'back_attack' | 'ultimate_used';
   value: number;
   turnsLeft: number;
 }
@@ -117,6 +118,13 @@ export interface CombatEvent {
   skillName?: string;       // for skill activation display
   color?: string;           // override color for display
   isSkillDamage?: boolean;  // purple/blue for skill damage
+}
+
+export interface BattleTactic {
+  instanceId: string;
+  cardId: string;
+  level: number;
+  used: boolean;
 }
 
 // ============================================================
@@ -131,6 +139,7 @@ export type BattleAction =
   | { type: 'ultimate_skill'; warriorId: string; cardId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'attack'; attackerId: string; targetId: string; side: 'player' | 'enemy'; damage: number; events: CombatEvent[]; log: string[]; skillName?: string }
   | { type: 'stun_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; log: string[] }
+  | { type: 'forced_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; reason: 'field_event'; log: string[] }
   | { type: 'turn_end'; newTurn: number; phase: 'tactic' | 'result'; result: 'win' | 'lose' | 'draw' | null; log: string[] };
 
 export interface BattleState {
@@ -139,12 +148,12 @@ export interface BattleState {
   phase: 'tactic' | 'combat' | 'result';
   player: {
     warriors: BattleWarrior[];
-    tactics: { instanceId: string; cardId: string; used: boolean }[];
+    tactics: BattleTactic[];
     selectedTactic: number | null;
   };
   enemy: {
     warriors: BattleWarrior[];
-    tactics: { instanceId: string; cardId: string; used: boolean }[];
+    tactics: BattleTactic[];
     selectedTactic: number | null;
   };
   fieldEvent: BattleFieldEvent;

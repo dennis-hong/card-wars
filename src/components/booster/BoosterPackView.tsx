@@ -1,471 +1,487 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { PackType, PACK_INFO, Card, Grade, GRADE_COLORS, GRADE_NAMES, BoosterPack } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
 import { SFX } from '@/lib/sound';
 
-// ============================================================
-// Types
-// ============================================================
-
 interface Props {
   packs: BoosterPack[];
   onOpen: (packId: string) => Card[] | null;
   onComplete: () => void;
-  ownedCardIds?: Set<string>; // card IDs already owned before this session
+  ownedCardIds?: Set<string>;
 }
 
 type Phase = 'select' | 'tearing' | 'revealing' | 'summary';
+type TearStage = 'charge' | 'rip' | 'burst';
 
-// ============================================================
-// Particle System
-// ============================================================
+const impactShake = {
+  initial: { x: 0, y: 0 },
+  animate: {
+    x: [0, -4, 4, -3, 3, 0],
+    y: [0, -2, 2, 1, -1, 0],
+    transition: { duration: 0.35, ease: 'easeInOut' as const },
+  },
+};
 
-function Particles({ grade, active }: { grade: Grade; active: boolean }) {
-  if (!active) return null;
-
-  if (grade === 2) {
-    // Blue particles for rare
-    return (
-      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute bottom-0 w-1.5 h-1.5 rounded-full bg-blue-400"
-            style={{
-              left: `${8 + (i * 7.5)}%`,
-              animation: `particleFloat ${1.2 + Math.random() * 0.8}s ease-out ${i * 0.1}s infinite`,
-              ['--px' as string]: `${(Math.random() - 0.5) * 30}px`,
-              opacity: 0.8,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (grade === 3) {
-    // Purple/violet particles for hero
-    return (
-      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">
-        {Array.from({ length: 16 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute bottom-0 rounded-full"
-            style={{
-              left: `${5 + (i * 6)}%`,
-              width: `${3 + Math.random() * 3}px`,
-              height: `${3 + Math.random() * 3}px`,
-              background: i % 2 === 0 ? '#aa44ff' : '#cc88ff',
-              animation: `particleFloat ${1 + Math.random() * 1}s ease-out ${i * 0.08}s infinite`,
-              ['--px' as string]: `${(Math.random() - 0.5) * 40}px`,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (grade === 4) {
-    // Rainbow particles for legendary
-    const colors = ['#ff4444', '#ff8800', '#ffff00', '#44ff44', '#4488ff', '#8844ff', '#ff44ff'];
-    return (
-      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg z-10">
-        {Array.from({ length: 24 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full"
-            style={{
-              bottom: `${Math.random() * 30}%`,
-              left: `${Math.random() * 90 + 5}%`,
-              width: `${3 + Math.random() * 4}px`,
-              height: `${3 + Math.random() * 4}px`,
-              background: colors[i % colors.length],
-              animation: `rainbowParticle ${1.5 + Math.random() * 1}s ease-out ${i * 0.06}s infinite`,
-              ['--px' as string]: `${(Math.random() - 0.5) * 60}px`,
-              ['--py' as string]: `${-80 - Math.random() * 60}px`,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  return null;
+function gradeTone(grade: Grade) {
+  if (grade === 4) return '#ffb100';
+  if (grade === 3) return '#a855f7';
+  if (grade === 2) return '#3b82f6';
+  return '#94a3b8';
 }
 
-// ============================================================
-// Light Burst Effect
-// ============================================================
+function gradeLabel(grade: Grade) {
+  if (grade === 4) return 'LEGEND';
+  if (grade === 3) return 'HERO';
+  if (grade === 2) return 'RARE';
+  return 'COMMON';
+}
 
-function LightBurst({ grade, active }: { grade: Grade; active: boolean }) {
-  if (!active || grade < 3) return null;
+function cinematicDelay(grade: Grade) {
+  if (grade === 4) return 1900;
+  if (grade === 3) return 1200;
+  return 700;
+}
 
-  if (grade === 3) {
-    return (
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-0">
-        <div
-          className="absolute w-full h-full rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(170,68,255,0.5) 0%, transparent 70%)',
-            animation: 'heroLightBurst 0.8s ease-out forwards',
-          }}
-        />
-      </div>
-    );
-  }
+function revealSfxDelay(grade: Grade) {
+  if (grade === 4) return 250;
+  if (grade === 3) return 220;
+  if (grade === 2) return 190;
+  return 170;
+}
+
+function seeded(seed: number) {
+  const x = Math.sin(seed * 999.97) * 10000;
+  return x - Math.floor(x);
+}
+
+function SealedPackCard({
+  pack,
+  index,
+  total,
+  active,
+  compact,
+  onSelect,
+}: {
+  pack: BoosterPack;
+  index: number;
+  total: number;
+  active: boolean;
+  compact: boolean;
+  onSelect: () => void;
+}) {
+  const info = PACK_INFO[pack.type];
+  const fanAngle = total === 1 ? 0 : (compact ? -13 : -17) + (index / (total - 1)) * (compact ? 26 : 34);
+  const fanX = total === 1 ? 0 : (compact ? -42 : -60) + (index / (total - 1)) * (compact ? 84 : 120);
+  const fanY = Math.abs(fanAngle) * (compact ? 0.55 : 0.7);
+  const centerX = compact ? 66 : 84;
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-0">
+    <motion.button
+      type="button"
+      onClick={onSelect}
+      className="absolute rounded-2xl overflow-hidden text-left"
+      style={{
+        border: `1px solid ${info.color}`,
+        transformStyle: 'preserve-3d',
+        width: compact ? 156 : 192,
+        height: compact ? 218 : 256,
+      }}
+      initial={{ opacity: 0, y: 50, scale: 0.8, rotate: fanAngle }}
+      animate={{
+        opacity: 1,
+        x: centerX + fanX,
+        y: active ? fanY - (compact ? 24 : 34) : fanY,
+        scale: active ? (compact ? 1.08 : 1.12) : 0.93,
+        rotate: active ? 0 : fanAngle,
+        filter: active ? 'brightness(1.1)' : 'brightness(0.72) saturate(0.85)',
+      }}
+      whileHover={{
+        y: active ? fanY - (compact ? 28 : 40) : fanY - 8,
+        scale: active ? (compact ? 1.1 : 1.14) : 0.97,
+      }}
+      whileTap={{ scale: active ? 1.08 : 0.93 }}
+      transition={{ type: 'spring', stiffness: 230, damping: 22 }}
+    >
       <div
-        className="absolute w-full h-full rounded-full"
+        className="absolute inset-0"
         style={{
-          background: 'radial-gradient(circle, rgba(255,200,0,0.6) 0%, rgba(255,100,0,0.3) 30%, transparent 70%)',
-          animation: 'legendGoldBurst 1s ease-out forwards',
+          background: `linear-gradient(145deg, ${info.color}33 0%, rgba(12,18,33,0.75) 45%, ${info.color}20 100%)`,
         }}
       />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'radial-gradient(circle at 20% 12%, rgba(255,255,255,0.2), transparent 45%), radial-gradient(circle at 80% 88%, rgba(255,255,255,0.14), transparent 45%)',
+        }}
+      />
+      <motion.div
+        className="absolute -inset-y-8 w-20"
+        style={{
+          background: 'linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.24) 50%, transparent 80%)',
+        }}
+        animate={{ x: active ? ['-120%', '160%'] : '-120%' }}
+        transition={{ duration: 1.5, repeat: active ? Infinity : 0, ease: 'linear' }}
+      />
+      <div className={`absolute inset-0 ${compact ? 'p-3.5' : 'p-5'} flex flex-col justify-between`}>
+        <div className={`text-right ${compact ? 'text-[9px]' : 'text-[11px]'} tracking-[0.24em] text-white/70`}>CARD WARS</div>
+        <div>
+          <div className={`${compact ? 'text-[10px]' : 'text-xs'} tracking-[0.18em] text-white/65`}>BOOSTER</div>
+          <div className={`mt-1 ${compact ? 'text-xl' : 'text-2xl'} font-black text-white`}>{info.name}</div>
+          <div className={`mt-1 ${compact ? 'text-[11px]' : 'text-xs'} text-white/75`}>{info.cardCount} Cards</div>
+        </div>
+        <div className={`flex items-center justify-between ${compact ? 'text-[10px]' : 'text-[11px]'} text-white/75`}>
+          <span>Guarantee</span>
+          <span className="font-bold" style={{ color: GRADE_COLORS[info.guaranteed] }}>
+            {GRADE_NAMES[info.guaranteed]}
+          </span>
+        </div>
+      </div>
+      <div
+        className="absolute inset-0 border border-white/20 rounded-2xl pointer-events-none"
+        style={{ boxShadow: active ? `0 0 38px ${info.color}44` : `0 0 14px ${info.color}33` }}
+      />
+    </motion.button>
+  );
+}
+
+function PackDetailPanel({ pack, compact, onOpen }: { pack: BoosterPack; compact: boolean; onOpen: () => void }) {
+  const info = PACK_INFO[pack.type];
+  return (
+    <motion.div
+      key={pack.id}
+      className={`w-full max-w-xl rounded-2xl border border-white/12 bg-black/35 backdrop-blur-md ${compact ? 'p-3.5' : 'p-4'}`}
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.28 }}
+    >
+      <div className={`flex ${compact ? 'flex-col items-start' : 'items-center justify-between'} gap-4`}>
+        <div>
+          <div className="text-[11px] tracking-[0.2em] text-white/55">SELECTED PACK</div>
+          <h2 className={`${compact ? 'text-lg' : 'text-xl'} font-extrabold text-white mt-0.5`}>{info.name}</h2>
+          <div className="text-sm text-white/70 mt-1">보장 등급: <span style={{ color: GRADE_COLORS[info.guaranteed] }}>{GRADE_NAMES[info.guaranteed]}</span></div>
+        </div>
+        <motion.button
+          type="button"
+          className={`ui-btn ${compact ? 'w-full px-4 py-2.5' : 'px-5 py-2.5'} text-sm font-extrabold text-white`}
+          style={{
+            background: `linear-gradient(135deg, ${info.color} 0%, #f8fafc 220%)`,
+            boxShadow: `0 14px 34px ${info.color}55`,
+          }}
+          whileHover={{ y: -2, scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onOpen}
+        >
+          지금 개봉
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+function TearingOverlay({ packType, compact, onDone }: { packType: PackType; compact: boolean; onDone: () => void }) {
+  const info = PACK_INFO[packType];
+  const [stage, setStage] = useState<TearStage>('charge');
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setStage('rip'), 340),
+      setTimeout(() => setStage('burst'), 840),
+      setTimeout(onDone, 1260),
+    ];
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, [onDone]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden">
+      <motion.div
+        className="absolute inset-0"
+        style={{ background: 'radial-gradient(circle at center, rgba(15,23,42,0.72), rgba(2,6,23,0.95))' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
+      />
+
+      <AnimatePresence>
+        {stage === 'burst' && (
+          <motion.div
+            className="absolute inset-0"
+            style={{ background: `radial-gradient(circle, ${info.color}55 0%, transparent 62%)` }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 1, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <div
+        className="relative"
+        style={{ width: compact ? 192 : 224, height: compact ? 248 : 288 }}
+      >
+        <motion.div
+          className="absolute inset-0 rounded-2xl border"
+          style={{
+            borderColor: `${info.color}`,
+            background: `linear-gradient(150deg, ${info.color}44 0%, rgba(9,12,22,0.95) 50%, ${info.color}30 100%)`,
+          }}
+          animate={
+            stage === 'charge'
+              ? { scale: [1, 0.98, 1.04], opacity: 1 }
+              : stage === 'rip'
+              ? { scale: [1.04, 0.98], opacity: [1, 0.25, 0] }
+              : { scale: 0.96, opacity: 0 }
+          }
+          transition={{
+            duration: stage === 'charge' ? 0.33 : 0.38,
+            repeat: stage === 'charge' ? Infinity : 0,
+            ease: 'easeOut',
+          }}
+        />
+
+        <motion.div
+          className="absolute inset-y-0 left-0 w-1/2 rounded-l-2xl border-r border-white/18"
+          style={{ background: `linear-gradient(120deg, ${info.color}66, rgba(7,10,19,0.85))` }}
+          animate={
+            stage === 'rip'
+              ? { x: -92, rotate: -15, opacity: [1, 1, 0.3] }
+              : stage === 'burst'
+              ? { x: -150, rotate: -24, opacity: 0 }
+              : { x: 0, rotate: 0, opacity: 1 }
+          }
+          transition={{ duration: stage === 'charge' ? 0.2 : 0.45, ease: 'easeOut' }}
+        />
+
+        <motion.div
+          className="absolute inset-y-0 right-0 w-1/2 rounded-r-2xl border-l border-white/18"
+          style={{ background: `linear-gradient(240deg, ${info.color}66, rgba(7,10,19,0.85))` }}
+          animate={
+            stage === 'rip'
+              ? { x: 92, rotate: 15, opacity: [1, 1, 0.3] }
+              : stage === 'burst'
+              ? { x: 150, rotate: 24, opacity: 0 }
+              : { x: 0, rotate: 0, opacity: 1 }
+          }
+          transition={{ duration: stage === 'charge' ? 0.2 : 0.45, ease: 'easeOut' }}
+        />
+
+        <motion.div
+          className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2"
+          style={{ background: `linear-gradient(180deg, transparent, #fff, transparent)` }}
+          animate={
+            stage === 'charge'
+              ? { opacity: [0.2, 0.65, 0.2], scaleY: [0.6, 1.1, 0.7] }
+              : stage === 'rip'
+              ? { opacity: [0.8, 1, 0.4], scaleY: [1, 1.2, 0.6] }
+              : { opacity: 0 }
+          }
+          transition={{ duration: 0.42 }}
+        />
+
+        <motion.div
+          className="absolute left-1/2 top-1/2 w-24 h-24 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ background: `radial-gradient(circle, ${info.color}cc 0%, ${info.color}44 45%, transparent 70%)` }}
+          animate={
+            stage === 'burst'
+              ? { scale: [0.4, 1.35, 2], opacity: [0.4, 0.95, 0] }
+              : stage === 'rip'
+              ? { scale: [0.2, 0.8], opacity: [0.1, 0.5] }
+              : { scale: 0.1, opacity: 0.2 }
+          }
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        />
+
+        {stage !== 'charge' && (
+          <div className="absolute inset-0">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="absolute left-1/2 top-1/2 rounded-sm"
+                style={{
+                  width: compact ? 5 : 6,
+                  height: compact ? 2 : 3,
+                  background: i % 2 ? '#ffffff' : info.color,
+                }}
+                initial={{ x: -2, y: -2, opacity: 0 }}
+                animate={{
+                  x: (seeded(i + 1) - 0.5) * (compact ? 220 : 280),
+                  y: (seeded(i + 101) - 0.5) * (compact ? 190 : 240),
+                  rotate: seeded(i + 301) * 420,
+                  opacity: stage === 'burst' ? [0, 1, 0] : [0, 0.7, 0],
+                }}
+                transition={{ duration: 0.58, ease: 'easeOut', delay: i * 0.015 }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <motion.div
+        className={`absolute ${compact ? 'bottom-[20%] text-sm' : 'bottom-[22%] text-base'} text-white/90 font-bold tracking-wide`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        {info.name} OPENING...
+      </motion.div>
     </div>
   );
 }
-
-// ============================================================
-// Hologram Overlay (Grade 3)
-// ============================================================
-
-function HoloOverlay({ active }: { active: boolean }) {
-  if (!active) return null;
-  return (
-    <div
-      className="absolute inset-0 pointer-events-none rounded-lg z-10 opacity-30"
-      style={{
-        background: 'linear-gradient(135deg, #ff00ff33, #00ffff33, #ff00ff33, #00ffff33)',
-        backgroundSize: '200% 200%',
-        animation: 'holoShift 2s ease-in-out infinite',
-        mixBlendMode: 'screen',
-      }}
-    />
-  );
-}
-
-// ============================================================
-// Card Reveal Wrapper (3D flip + grade effects)
-// ============================================================
 
 function CardRevealSlot({
   card,
   index,
   revealed,
+  dimmed,
+  compact,
   onReveal,
-  legendaryFocused,
 }: {
   card: Card;
   index: number;
   revealed: boolean;
+  dimmed: boolean;
+  compact: boolean;
   onReveal: (index: number) => void;
-  legendaryFocused: boolean;
 }) {
   const cardData = getCardById(card.id);
-  const isLegend = card.grade === 4;
-  const isHero = card.grade === 3;
-  const isRare = card.grade === 2;
+  const tone = gradeTone(card.grade);
+  const isHeroOrHigher = card.grade >= 3;
+
+  if (!cardData) return null;
 
   return (
-    <div
+    <motion.div
       className="relative"
-      style={{
-        animation: `cardDeal 0.5s cubic-bezier(0.2, 0, 0.2, 1) ${index * 0.12}s both`,
-        zIndex: legendaryFocused && isLegend ? 50 : revealed ? 10 : 1,
-      }}
+      initial={{ opacity: 0, y: 60, rotate: -8, scale: 0.85 }}
+      animate={{ opacity: dimmed ? 0.42 : 1, y: 0, rotate: 0, scale: dimmed ? 0.95 : 1 }}
+      transition={{ delay: index * 0.1, type: 'spring', stiffness: 180, damping: 20 }}
     >
-      {/* Light burst behind card */}
-      {revealed && <LightBurst grade={card.grade} active={revealed} />}
-
-      {/* Shake wrapper for hero/legend */}
-      <div
-        style={
-          revealed && isHero
-            ? { animation: 'heroShake 0.4s ease-in-out' }
-            : revealed && isLegend
-            ? { animation: 'legendShake 0.6s ease-in-out' }
-            : undefined
-        }
+      <motion.div
+        className="relative cursor-pointer"
+        style={{ width: compact ? 136 : 160, height: compact ? 194 : 224 }}
+        onClick={() => !revealed && onReveal(index)}
+        whileHover={!revealed ? { y: -5 } : undefined}
       >
-        {/* Legendary zoom */}
-        <div
-          style={
-            revealed && isLegend && legendaryFocused
-              ? { animation: 'legendZoomIn 0.5s ease-out forwards', transformOrigin: 'center center' }
-              : undefined
-          }
-        >
-          {/* 3D flip container */}
-          <div
-            className="card-flip-container cursor-pointer w-40 h-56"
-            onClick={() => !revealed && onReveal(index)}
-          >
-            <div className={`card-flip-inner ${revealed ? 'flipped' : ''}`}>
-              {/* Back face */}
-              <div className="card-flip-back">
-                <div
-                  className="relative w-40 h-56 rounded-lg overflow-hidden border-2 border-amber-700 shadow-lg select-none hover:scale-105 transition-transform"
+        <AnimatePresence mode="wait">
+          {!revealed ? (
+            <motion.div
+              key="back"
+              className="absolute inset-0 rounded-xl border border-amber-700/70 overflow-hidden"
+              style={{
+                background: 'linear-gradient(155deg, #1f1309, #432615 55%, #1f1309)',
+              }}
+              initial={{ opacity: 1, rotateY: 0 }}
+              exit={{ opacity: 0, rotateY: -90, scale: 0.96 }}
+              transition={{ duration: 0.32, ease: 'easeInOut' }}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_14%,rgba(255,255,255,0.16),transparent_42%),radial-gradient(circle_at_82%_86%,rgba(255,255,255,0.08),transparent_46%)]" />
+              <div className="absolute inset-0 flex items-center justify-center text-amber-300/80 text-2xl font-black tracking-[0.35em]">CW</div>
+              <motion.div
+                className="absolute -inset-y-6 w-14"
+                style={{ background: 'linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.2) 50%, transparent 75%)' }}
+                animate={{ x: ['-120%', '180%'] }}
+                transition={{ duration: 2.1, repeat: Infinity, ease: 'linear' }}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="front"
+              className="absolute inset-0"
+              initial={{ opacity: 0, rotateY: 90, scale: 0.96 }}
+              animate={{
+                opacity: 1,
+                rotateY: 0,
+                scale: card.grade >= 3 ? [1, 1.04, 1] : 1,
+              }}
+              transition={{ duration: 0.38, ease: 'easeOut' }}
+            >
+              <div
+                className="absolute -inset-2 rounded-2xl pointer-events-none"
+                style={{
+                  background: `radial-gradient(circle, ${tone}70 0%, transparent 70%)`,
+                  filter: 'blur(10px)',
+                  opacity: 1,
+                }}
+              />
+
+              <div className="relative rounded-lg overflow-hidden">
+                {cardData.type === 'warrior' ? (
+                  <WarriorCardView card={cardData} size="md" showDetails />
+                ) : (
+                  <TacticCardView card={cardData} size="md" />
+                )}
+
+                <motion.div
+                  className="absolute inset-0 pointer-events-none"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   style={{
-                    background: 'linear-gradient(135deg, #2d1810, #4a2820, #2d1810)',
+                    background: isHeroOrHigher
+                      ? `linear-gradient(135deg, transparent 0%, ${tone}22 40%, transparent 100%)`
+                      : 'linear-gradient(135deg, transparent 0%, rgba(148,163,184,0.15) 50%, transparent 100%)',
+                    mixBlendMode: 'screen',
                   }}
-                >
-                  <div className="absolute inset-2 border border-amber-600/30 rounded" />
-                  <div className="absolute inset-4 border border-amber-600/20 rounded" />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="text-2xl font-bold text-amber-500/80 tracking-wider">W</div>
-                    <div className="text-[8px] text-amber-600/60 tracking-widest mt-1">CARD WARS</div>
-                  </div>
-                  <div className="absolute top-1 left-1 text-amber-700/40 text-xs">&#x2726;</div>
-                  <div className="absolute top-1 right-1 text-amber-700/40 text-xs">&#x2726;</div>
-                  <div className="absolute bottom-1 left-1 text-amber-700/40 text-xs">&#x2726;</div>
-                  <div className="absolute bottom-1 right-1 text-amber-700/40 text-xs">&#x2726;</div>
-                  {/* Tap hint shimmer */}
-                  <div
+                />
+
+                {card.grade >= 3 && (
+                  <motion.div
                     className="absolute inset-0 pointer-events-none"
                     style={{
-                      background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 45%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.08) 55%, transparent 60%)',
-                      backgroundSize: '200% 100%',
-                      animation: 'shimmer 3s infinite',
+                      background: card.grade === 4
+                        ? 'conic-gradient(from 180deg, rgba(255,177,0,0.00), rgba(255,177,0,0.55), rgba(255,255,255,0.00), rgba(255,177,0,0.45), rgba(255,177,0,0.00))'
+                        : 'conic-gradient(from 180deg, rgba(168,85,247,0.00), rgba(168,85,247,0.48), rgba(255,255,255,0.00), rgba(99,102,241,0.40), rgba(168,85,247,0.00))',
+                      mixBlendMode: 'screen',
                     }}
+                    initial={{ opacity: 0, rotate: 0 }}
+                    animate={{ opacity: [0.2, 0.8, 0.35], rotate: [0, 50, 110] }}
+                    transition={{ duration: card.grade === 4 ? 1.15 : 0.9, ease: 'easeOut' }}
                   />
-                </div>
+                )}
               </div>
 
-              {/* Front face (revealed card) */}
-              <div className="card-flip-front">
-                <div
-                  className="relative"
-                  style={
-                    revealed && isLegend
-                      ? { animation: 'rainbowBorder 2s linear infinite', borderRadius: '8px', border: '3px solid #ffaa00' }
-                      : revealed && isRare
-                      ? { animation: 'rareGlow 1.5s ease-in-out infinite', borderRadius: '8px' }
-                      : undefined
-                  }
-                >
-                  {/* Hologram overlay for hero */}
-                  <HoloOverlay active={revealed && isHero} />
+              <motion.div
+                className="absolute left-2 bottom-2 px-2 py-1 rounded-full text-[10px] font-black tracking-wider"
+                style={{ color: '#fff', background: `${tone}dd` }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {gradeLabel(card.grade)}
+              </motion.div>
 
-                  {/* Particles */}
-                  <Particles grade={card.grade} active={revealed} />
-
-                  {/* Grade 1: Subtle shine sweep */}
-                  {revealed && card.grade === 1 && (
-                    <div
-                      className="absolute inset-0 pointer-events-none z-10 overflow-hidden rounded-lg"
-                    >
-                      <div
-                        className="absolute top-0 w-8 h-full"
-                        style={{
-                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                          animation: 'gradeShine 1.5s ease-in-out forwards',
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {cardData && cardData.type === 'warrior' ? (
-                    <WarriorCardView card={cardData} size="md" showDetails />
-                  ) : cardData ? (
-                    <TacticCardView card={cardData} size="md" />
-                  ) : null}
+              {card.grade === 4 && (
+                <div className="absolute inset-0 pointer-events-none">
+                  {Array.from({ length: 16 }).map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute left-1/2 top-1/2 rounded-full"
+                      style={{
+                        width: 4,
+                        height: 4,
+                        background: i % 2 ? '#fff7d0' : '#ffb100',
+                      }}
+                      initial={{ x: 0, y: 0, opacity: 0 }}
+                      animate={{
+                        x: (seeded(i + 11) - 0.5) * 170,
+                        y: (seeded(i + 151) - 0.5) * 220,
+                        scale: [1, 1.25, 0.7],
+                        opacity: [0, 0.9, 0],
+                      }}
+                      transition={{ duration: 0.95, delay: i * 0.012, ease: 'easeOut' }}
+                    />
+                  ))}
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Sealed Pack (Fan Display)
-// ============================================================
-
-function SealedPack({
-  pack,
-  index,
-  total,
-  isActive,
-  onClick,
-}: {
-  pack: BoosterPack;
-  index: number;
-  total: number;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  const info = PACK_INFO[pack.type];
-
-  // Fan-spread calculation
-  const fanAngle = total === 1 ? 0 : -15 + (index / (total - 1)) * 30;
-  const fanX = total === 1 ? 0 : -60 + (index / (total - 1)) * 120;
-  const fanY = Math.abs(fanAngle) * 0.8;
-
-  const baseTransform = `translateX(${fanX}px) translateY(${fanY}px) rotate(${fanAngle}deg)`;
-
-  return (
-    <div
-      className="absolute transition-all duration-500 ease-out"
-      style={{
-        transform: isActive
-          ? 'translateY(-30px) rotate(0deg) scale(1.12)'
-          : baseTransform,
-        zIndex: isActive ? 20 : total - Math.abs(index - Math.floor(total / 2)),
-        filter: isActive ? 'brightness(1.1)' : 'brightness(0.75)',
-        ['--fan-transform' as string]: baseTransform,
-      }}
-    >
-      <div
-        onClick={onClick}
-        className={`relative w-44 h-60 rounded-xl cursor-pointer select-none transition-all duration-300 ${
-          isActive ? 'hover:scale-105' : 'hover:brightness-90'
-        }`}
-        style={{
-          background: `linear-gradient(135deg, ${info.color}33, ${info.color}66, ${info.color}33)`,
-          border: `3px solid ${info.color}`,
-          boxShadow: isActive
-            ? `0 0 30px ${info.color}66, 0 10px 40px rgba(0,0,0,0.5)`
-            : `0 0 10px ${info.color}22`,
-        }}
-      >
-        {/* Pack shimmer */}
-        <div
-          className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none"
-          style={{
-            background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 55%, transparent 60%)',
-            backgroundSize: '200% 100%',
-            animation: isActive ? 'shimmer 2s infinite' : 'none',
-          }}
-        />
-
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-          <div className="text-4xl mb-2">🎴</div>
-          <div className="text-lg font-bold">{info.name}</div>
-          <div className="text-sm opacity-70">카드 {info.cardCount}장</div>
-          {isActive && (
-            <div className="mt-3 text-xs animate-pulse opacity-70">탭하여 개봉!</div>
+              )}
+            </motion.div>
           )}
-        </div>
-
-        {/* Pack type indicator dot */}
-        <div
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-          style={{ background: info.color, boxShadow: `0 0 6px ${info.color}` }}
-        />
-      </div>
-    </div>
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
   );
 }
-
-// ============================================================
-// Tearing Animation
-// ============================================================
-
-function TearingOverlay({ packType, onDone }: { packType: PackType; onDone: () => void }) {
-  const info = PACK_INFO[packType];
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    let p = 0;
-    const interval = setInterval(() => {
-      p += 5;
-      setProgress(p);
-      if (p >= 100) {
-        clearInterval(interval);
-        setTimeout(onDone, 200);
-      }
-    }, 40);
-    return () => clearInterval(interval);
-  }, [onDone]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-      {/* Darkened backdrop */}
-      <div className="absolute inset-0 bg-black/60" style={{ animation: 'fadeIn 0.3s ease-out' }} />
-
-      {/* Pack being torn */}
-      <div className="relative">
-        <div
-          className="relative w-52 h-72 rounded-xl overflow-hidden"
-          style={{
-            border: `3px solid ${info.color}`,
-            background: `linear-gradient(135deg, ${info.color}33, ${info.color}66, ${info.color}33)`,
-          }}
-        >
-          {/* Left half tears away */}
-          <div
-            className="absolute inset-0 transition-transform duration-75"
-            style={{
-              background: `linear-gradient(135deg, ${info.color}44, ${info.color}77)`,
-              clipPath: `polygon(0 0, ${50 - progress * 0.5}% 0, ${45 - progress * 0.5}% 100%, 0 100%)`,
-              transform: `translateX(${-progress * 0.5}px) rotate(${-progress * 0.1}deg)`,
-            }}
-          />
-          {/* Right half tears away */}
-          <div
-            className="absolute inset-0 transition-transform duration-75"
-            style={{
-              background: `linear-gradient(135deg, ${info.color}44, ${info.color}77)`,
-              clipPath: `polygon(${50 + progress * 0.5}% 0, 100% 0, 100% 100%, ${55 + progress * 0.5}% 100%)`,
-              transform: `translateX(${progress * 0.5}px) rotate(${progress * 0.1}deg)`,
-            }}
-          />
-          {/* Center glow emerging */}
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ opacity: progress / 100 }}
-          >
-            <div
-              className="w-20 h-20 rounded-full"
-              style={{
-                background: `radial-gradient(circle, ${info.color}cc, ${info.color}44, transparent)`,
-                transform: `scale(${0.5 + progress / 100})`,
-                filter: `blur(${4 - progress * 0.03}px)`,
-              }}
-            />
-          </div>
-
-          {/* Sparkle particles */}
-          {progress > 30 && (
-            <div className="absolute inset-0">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute text-sm"
-                  style={{
-                    left: `${20 + Math.random() * 60}%`,
-                    top: `${20 + Math.random() * 60}%`,
-                    animation: `particleFloat ${0.6 + Math.random() * 0.6}s ease-out forwards`,
-                    ['--px' as string]: `${(Math.random() - 0.5) * 40}px`,
-                  }}
-                >
-                  ✨
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pack name */}
-        <div className="text-center mt-4 text-white font-bold text-lg" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-          {info.name} 개봉 중...
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Summary Screen
-// ============================================================
 
 function SummaryScreen({
   cards,
@@ -478,298 +494,269 @@ function SummaryScreen({
   onDone: () => void;
   remainingPacks: number;
 }) {
-  // Sort by grade descending
   const sorted = [...cards].sort((a, b) => b.grade - a.grade);
   const bestGrade = sorted[0]?.grade || 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/80"
-      style={{ animation: 'fadeIn 0.4s ease-out' }}
+    <motion.div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-black/80"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25 }}
     >
-      {/* Title */}
-      <div
+      <motion.div
         className="text-2xl font-bold mb-6 text-center"
-        style={{
-          color: GRADE_COLORS[bestGrade as Grade],
-          textShadow: `0 0 20px ${GRADE_COLORS[bestGrade as Grade]}66`,
-          animation: 'slideUp 0.5s ease-out',
-        }}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ color: GRADE_COLORS[bestGrade as Grade] }}
       >
         획득한 카드
-      </div>
+      </motion.div>
 
-      {/* Cards grid */}
       <div className="flex flex-wrap justify-center gap-3 max-w-lg mb-8">
         {sorted.map((card, i) => {
           const cardData = getCardById(card.id);
           if (!cardData) return null;
           const isNew = !ownedCardIds.has(card.id);
-          const isHighGrade = card.grade >= 3;
 
           return (
-            <div
-              key={i}
+            <motion.div
+              key={`${card.id}-${i}`}
               className="relative"
-              style={{
-                animation: `summaryCardIn 0.4s ease-out ${i * 0.1}s both`,
-              }}
+              initial={{ opacity: 0, y: 20, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: i * 0.07, type: 'spring', stiffness: 180, damping: 20 }}
             >
-              {/* Highlight glow for high grade */}
-              {isHighGrade && (
-                <div
-                  className="absolute -inset-1 rounded-lg z-0"
-                  style={{
-                    background: `radial-gradient(circle, ${GRADE_COLORS[card.grade as Grade]}44, transparent)`,
-                    animation: 'pulseGlow 2s ease-in-out infinite',
-                  }}
-                />
+              {cardData.type === 'warrior' ? (
+                <WarriorCardView card={cardData} size="md" showDetails />
+              ) : (
+                <TacticCardView card={cardData} size="md" />
               )}
-
-              <div className="relative z-10">
-                {cardData.type === 'warrior' ? (
-                  <WarriorCardView card={cardData} size="md" showDetails />
-                ) : (
-                  <TacticCardView card={cardData} size="md" />
-                )}
-              </div>
-
-              {/* NEW / DUP badge */}
               <div
-                className={`absolute -top-2 -right-2 z-20 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  isNew
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-600 text-gray-300'
-                }`}
-                style={isNew ? { animation: 'newBadge 1s ease-in-out infinite' } : undefined}
+                className={`absolute -top-2 -right-2 z-20 px-2 py-0.5 rounded-full text-[10px] font-bold ${isNew ? 'bg-emerald-500 text-white' : 'bg-gray-600 text-gray-200'}`}
               >
-                {isNew ? 'NEW!' : '중복'}
+                {isNew ? 'NEW' : 'DUP'}
               </div>
-
-              {/* Grade label */}
-              <div
-                className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-2 py-0.5 rounded-full text-[9px] font-bold"
-                style={{
-                  background: `${GRADE_COLORS[card.grade as Grade]}cc`,
-                  color: '#fff',
-                }}
-              >
-                {GRADE_NAMES[card.grade as Grade]}
-              </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
-      {/* Grade breakdown */}
-      <div className="flex gap-4 mb-6 text-xs">
-        {([4, 3, 2, 1] as Grade[]).map((g) => {
-          const count = cards.filter((c) => c.grade === g).length;
-          if (count === 0) return null;
-          return (
-            <div key={g} className="flex items-center gap-1">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ background: GRADE_COLORS[g] }}
-              />
-              <span className="text-gray-300">
-                {GRADE_NAMES[g]} x{count}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Done / Next button */}
-      <button
+      <motion.button
         onClick={onDone}
-        className="px-8 py-3 bg-gradient-to-r from-amber-600 to-yellow-500 text-white font-bold rounded-xl hover:from-amber-500 hover:to-yellow-400 transition-all active:scale-95"
-        style={{ animation: 'slideUp 0.5s ease-out 0.5s both' }}
+        className="ui-btn px-8 py-3 bg-gradient-to-r from-amber-600 to-yellow-500 text-white font-bold rounded-xl"
+        whileHover={{ y: -2, scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
       >
         {remainingPacks > 0 ? `다음 팩 개봉 (${remainingPacks}개 남음)` : '확인'}
-      </button>
-    </div>
+      </motion.button>
+    </motion.div>
   );
 }
 
-// ============================================================
-// Main Component
-// ============================================================
-
 export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardIds = new Set() }: Props) {
   const [phase, setPhase] = useState<Phase>('select');
+  const [activePackId, setActivePackId] = useState<string | null>(null);
   const [tearingPackId, setTearingPackId] = useState<string | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [revealedIndexes, setRevealedIndexes] = useState<Set<number>>(new Set());
-  const [legendaryFocused, setLegendaryFocused] = useState<number | null>(null);
-  const [shakeScreen, setShakeScreen] = useState(false);
-  const [goldFlash, setGoldFlash] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const [impactKey, setImpactKey] = useState(0);
+  const [flashTone, setFlashTone] = useState<string | null>(null);
+  const [compact, setCompact] = useState(false);
+  const [revealAllMode, setRevealAllMode] = useState(false);
 
-  const unopened = packs.filter((p) => !p.opened);
+  const unopened = useMemo(() => packs.filter((p) => !p.opened), [packs]);
 
-  // Tap a pack → start tearing immediately
-  const handleTapPack = (pack: BoosterPack) => {
+  useEffect(() => {
+    const sync = () => setCompact(window.innerWidth < 640);
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, []);
+
+  useEffect(() => {
+    if (unopened.length === 0) {
+      setActivePackId(null);
+      return;
+    }
+    if (!activePackId || !unopened.some((p) => p.id === activePackId)) {
+      setActivePackId(unopened[0].id);
+    }
+  }, [unopened, activePackId]);
+
+  const activePack = useMemo(
+    () => unopened.find((p) => p.id === activePackId) ?? unopened[0] ?? null,
+    [unopened, activePackId]
+  );
+
+  const startOpen = useCallback((pack: BoosterPack) => {
     if (phase !== 'select') return;
     SFX.packOpen();
     setTearingPackId(pack.id);
     setPhase('tearing');
-  };
+  }, [phase]);
 
-  // Tear done callback
   const handleTearDone = useCallback(() => {
     if (!tearingPackId) return;
     const result = onOpen(tearingPackId);
-    if (result) {
-      setCards(result);
-      setRevealedIndexes(new Set());
-      setLegendaryFocused(null);
-      setPhase('revealing');
-    }
+    if (!result) return;
+    setCards(result);
+    setRevealedIndexes(new Set());
+    setFocusIndex(null);
+    setFlashTone(null);
+    setRevealAllMode(false);
+    setPhase('revealing');
   }, [tearingPackId, onOpen]);
 
-  // Handle revealing a single card
   const handleRevealCard = useCallback((index: number) => {
-    if (phase !== 'revealing' || revealedIndexes.has(index)) return;
+    if (phase !== 'revealing' || revealAllMode || revealedIndexes.has(index)) return;
+
     const card = cards[index];
-
     SFX.cardFlip();
-    setTimeout(() => SFX.gradeReveal(card.grade), 300);
+    setTimeout(() => SFX.gradeReveal(card.grade), revealSfxDelay(card.grade));
 
-    // Grade-specific screen effects
-    if (card.grade === 3) {
-      setTimeout(() => {
-        setShakeScreen(true);
-        setTimeout(() => setShakeScreen(false), 400);
-      }, 350);
+    const tone = gradeTone(card.grade);
+    setFlashTone(tone);
+    setImpactKey((k) => k + 1);
+
+    if (card.grade >= 3) {
+      setFocusIndex(index);
+      setTimeout(() => setFocusIndex(null), cinematicDelay(card.grade));
     }
 
-    if (card.grade === 4) {
-      setTimeout(() => {
-        setGoldFlash(true);
-        setShakeScreen(true);
-        setLegendaryFocused(index);
-        setTimeout(() => {
-          setShakeScreen(false);
-          setGoldFlash(false);
-        }, 600);
-        // Auto-dismiss legendary focus after 2s
-        setTimeout(() => setLegendaryFocused(null), 2500);
-      }, 350);
-    }
+    setTimeout(() => setFlashTone(null), 240);
 
     setRevealedIndexes((prev) => {
       const next = new Set([...prev, index]);
-      // Check if all revealed
       if (next.size === cards.length) {
-        setTimeout(() => setPhase('summary'), card.grade >= 3 ? 2000 : 1000);
+        setTimeout(() => setPhase('summary'), card.grade >= 3 ? 1200 : 700);
       }
       return next;
     });
-  }, [phase, revealedIndexes, cards]);
+  }, [phase, revealAllMode, revealedIndexes, cards]);
 
-  // Reveal all remaining
   const handleRevealAll = useCallback(() => {
-    if (phase !== 'revealing') return;
-    const unrevealed = cards
-      .map((_, i) => i)
-      .filter((i) => !revealedIndexes.has(i));
+    if (phase !== 'revealing' || revealAllMode) return;
+    const pending = cards
+      .map((card, i) => ({ card, i }))
+      .filter(({ i }) => !revealedIndexes.has(i));
+    if (pending.length === 0) return;
 
-    unrevealed.forEach((idx, seqIdx) => {
-      setTimeout(() => {
-        handleRevealCard(idx);
-      }, seqIdx * 400);
+    setRevealAllMode(true);
+    const highest = pending.reduce((best, curr) => (curr.card.grade > best.card.grade ? curr : best));
+
+    // One-shot global reveal effect to avoid repeated flashes and shake flicker.
+    SFX.cardFlip();
+    setTimeout(() => SFX.gradeReveal(highest.card.grade), revealSfxDelay(highest.card.grade));
+    setFocusIndex(null);
+    setImpactKey((k) => k + 1);
+    setFlashTone(gradeTone(highest.card.grade));
+    setTimeout(() => setFlashTone(null), 260);
+
+    setRevealedIndexes((prev) => {
+      const next = new Set(prev);
+      pending.forEach(({ i }) => next.add(i));
+      return next;
     });
-  }, [phase, cards, revealedIndexes, handleRevealCard]);
 
-  // Summary done — continue to next pack or exit
-  const handleSummaryDone = () => {
-    // Check remaining unopened packs (after the one we just opened)
+    setTimeout(() => setPhase('summary'), highest.card.grade >= 3 ? 1000 : 700);
+  }, [phase, revealAllMode, cards, revealedIndexes]);
+
+  const handleSummaryDone = useCallback(() => {
     const remaining = packs.filter((p) => !p.opened);
     if (remaining.length > 0) {
-      // Reset to select phase for next pack
       setTearingPackId(null);
       setCards([]);
       setRevealedIndexes(new Set());
-      setLegendaryFocused(null);
+      setFocusIndex(null);
+      setRevealAllMode(false);
       setPhase('select');
-    } else {
-      onComplete();
+      return;
     }
-  };
+    onComplete();
+  }, [packs, onComplete]);
 
-  // ─── Render ───
-
-  // Tearing overlay
   if (phase === 'tearing' && tearingPackId) {
     const pack = packs.find((p) => p.id === tearingPackId);
     if (!pack) return null;
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
-        <TearingOverlay packType={pack.type} onDone={handleTearDone} />
+      <div className="min-h-screen bg-[radial-gradient(circle_at_50%_0%,#1b315f_0%,#0a1228_58%,#040812_100%)]">
+        <TearingOverlay packType={pack.type} compact={compact} onDone={handleTearDone} />
       </div>
     );
   }
 
-  // Card reveal phase
   if (phase === 'revealing') {
+    const legendaryFocused = focusIndex !== null && cards[focusIndex]?.grade === 4;
+
     return (
-      <div
-        ref={containerRef}
-        className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center p-4"
-        style={shakeScreen ? { animation: cards.some(c => c.grade === 4 && revealedIndexes.has(cards.indexOf(c))) ? 'legendShake 0.6s ease-in-out' : 'heroShake 0.4s ease-in-out' } : undefined}
-      >
-        {/* Gold flash overlay for legendary */}
-        {goldFlash && (
-          <div
-            className="fixed inset-0 z-40 pointer-events-none"
-            style={{
-              background: 'radial-gradient(circle, rgba(255,200,0,0.4), rgba(255,150,0,0.2), transparent)',
-              animation: 'goldFlash 0.6s ease-out forwards',
-            }}
-          />
-        )}
-
-        {/* Header */}
-        <div className="text-lg font-bold text-white mb-6" style={{ animation: 'slideUp 0.3s ease-out' }}>
-          카드를 탭하여 공개!
-        </div>
-
-        {/* Cards row */}
-        <div className="flex flex-wrap justify-center gap-4 mb-8">
-          {cards.map((card, i) => (
-            <CardRevealSlot
-              key={i}
-              card={card}
-              index={i}
-              revealed={revealedIndexes.has(i)}
-              onReveal={handleRevealCard}
-              legendaryFocused={legendaryFocused === i}
+      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_50%_-20%,#2a3f74_0%,#0b1328_45%,#050811_100%)] flex flex-col items-center justify-center p-3 sm:p-4">
+        <AnimatePresence>
+          {flashTone && (
+            <motion.div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: `radial-gradient(circle at center, ${flashTone}55, transparent 64%)` }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.85 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
             />
-          ))}
-        </div>
+          )}
+        </AnimatePresence>
 
-        {/* Reveal all button */}
-        {revealedIndexes.size < cards.length && (
-          <button
-            onClick={handleRevealAll}
-            className="px-6 py-2.5 bg-amber-600/80 text-white rounded-xl text-sm font-bold hover:bg-amber-500 transition-all active:scale-95"
-            style={{ animation: 'slideUp 0.4s ease-out 0.6s both' }}
+        <AnimatePresence>
+          {legendaryFocused && (
+            <motion.div
+              className="absolute inset-0 pointer-events-none bg-black"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+            />
+          )}
+        </AnimatePresence>
+
+        <motion.div key={impactKey} variants={impactShake} initial="initial" animate="animate" className="relative z-10 w-full flex flex-col items-center">
+          <motion.div
+            className={`${compact ? 'text-base mb-4' : 'text-lg mb-5'} font-bold text-white tracking-wide`}
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
           >
-            전체 공개
-          </button>
-        )}
+            카드를 탭하여 공개
+          </motion.div>
 
-        {/* Progress indicator */}
-        <div className="mt-4 text-xs text-gray-500">
-          {revealedIndexes.size} / {cards.length} 공개됨
-        </div>
+          <div className={`flex flex-wrap justify-center ${compact ? 'gap-2.5 mb-5' : 'gap-4 mb-7'}`}>
+            {cards.map((card, i) => (
+              <CardRevealSlot
+                key={`${card.id}-${i}`}
+                card={card}
+                index={i}
+                revealed={revealedIndexes.has(i)}
+                dimmed={focusIndex !== null && focusIndex !== i}
+                compact={compact}
+                onReveal={handleRevealCard}
+              />
+            ))}
+          </div>
+
+          {revealedIndexes.size < cards.length && (
+            <motion.button
+              onClick={handleRevealAll}
+              className="ui-btn px-6 py-2.5 rounded-xl text-sm font-bold text-white border border-white/20 bg-white/10 backdrop-blur-sm"
+              whileHover={{ y: -2, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {revealAllMode ? '전체 공개 완료' : '전체 공개'}
+            </motion.button>
+          )}
+
+          <div className="mt-4 text-xs text-white/55 tracking-wider">{revealedIndexes.size} / {cards.length} REVEALED</div>
+        </motion.div>
       </div>
     );
   }
 
-  // Summary phase
   if (phase === 'summary') {
-    // Count remaining unopened packs (excluding the one just opened, which is now marked opened)
     const remaining = packs.filter((p) => !p.opened);
     return (
       <SummaryScreen
@@ -781,52 +768,52 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
     );
   }
 
-  // Pack selection phase — tap a pack to open it directly
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center p-4">
-      {/* Header */}
-      <div className="w-full flex items-center justify-between mb-8">
-        <button
-          onClick={onComplete}
-          className="text-gray-400 text-sm hover:text-white transition-colors"
-        >
-          &#8592; 뒤로
-        </button>
-        <h1 className="text-white font-bold text-lg">부스터팩</h1>
-        <div className="text-sm text-gray-400">{unopened.length}개</div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_50%_-20%,#1a2f5f_0%,#0a1124_48%,#060a14_100%)] flex flex-col items-center p-4">
+      <div className="w-full max-w-5xl flex items-center justify-between mb-6 sm:mb-8 pt-1">
+        <button onClick={onComplete} className="text-white/65 text-sm hover:text-white transition-colors">&#8592; 뒤로</button>
+        <h1 className="text-white font-extrabold text-lg tracking-wide">부스터 오픈</h1>
+        <div className="text-sm text-white/70">{unopened.length}개</div>
       </div>
 
       {unopened.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+        <div className="flex-1 flex flex-col items-center justify-center text-center text-white/65">
           <div className="text-4xl mb-4">📦</div>
           <div>미개봉 부스터팩이 없습니다</div>
-          <div className="text-sm mt-2">전투에서 승리하면 부스터팩을 획득할 수 있습니다!</div>
+          <div className="text-sm mt-2">전투 승리 시 부스터팩을 획득할 수 있습니다.</div>
         </div>
       ) : (
         <>
-          {/* Fan-spread pack display — tap to open directly */}
-          <div
-            className="relative flex-1 flex items-center justify-center"
-            style={{ minHeight: '320px' }}
-          >
-            <div className="relative" style={{ width: '280px', height: '260px' }}>
+          <div className="relative flex-1 flex items-center justify-center w-full" style={{ minHeight: compact ? 300 : 370 }}>
+            <div className="relative" style={{ width: compact ? 290 : 360, height: compact ? 250 : 300 }}>
               {unopened.map((pack, i) => (
-                <SealedPack
+                <SealedPackCard
                   key={pack.id}
                   pack={pack}
                   index={i}
                   total={unopened.length}
-                  isActive={unopened.length === 1 || i === 0}
-                  onClick={() => handleTapPack(pack)}
+                  active={activePack?.id === pack.id}
+                  compact={compact}
+                  onSelect={() => setActivePackId(pack.id)}
                 />
               ))}
             </div>
           </div>
 
-          {/* Hint text */}
-          <div className="mb-8 text-sm text-gray-400 animate-pulse">
-            팩을 탭하여 개봉하세요!
+          <div className="w-full max-w-xl mb-8">
+            <AnimatePresence mode="wait">
+              {activePack && (
+                <PackDetailPanel
+                  key={activePack.id}
+                  pack={activePack}
+                  compact={compact}
+                  onOpen={() => startOpen(activePack)}
+                />
+              )}
+            </AnimatePresence>
           </div>
+
+          <div className="mb-5 text-xs tracking-[0.14em] text-white/45">PACK SELECT • OPEN • REVEAL</div>
         </>
       )}
     </div>

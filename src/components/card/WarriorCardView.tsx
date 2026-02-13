@@ -1,6 +1,7 @@
 'use client';
 
 import { WarriorCard, GRADE_LABELS, GRADE_COLORS, FACTION_COLORS, OwnedCard } from '@/types/game';
+import Image from 'next/image';
 import { getWarriorImage } from '@/lib/warrior-images';
 import { useState } from 'react';
 
@@ -69,9 +70,11 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
       {/* Portrait */}
       <div className="relative mx-2 mt-1 rounded overflow-hidden bg-black/30 flex items-center justify-center aspect-square">
         {portraitSrc && !imgError ? (
-          <img
+          <Image
             src={portraitSrc}
             alt={card.name}
+            fill
+            sizes={size === 'sm' ? '96px' : size === 'md' ? '160px' : '208px'}
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}
           />
@@ -94,51 +97,47 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
       </div>
 
       {/* Stats */}
-      {size === 'sm' ? (
-        <div className="grid grid-cols-4 px-0.5 mt-1 text-center text-[9px] leading-tight">
-          <div><span className="text-red-400/70">무</span> <span className="text-red-400 font-bold">{card.stats.attack}</span></div>
-          <div><span className="text-green-400/70">통</span> <span className="text-green-400 font-bold">{card.stats.command}</span></div>
-          <div><span className="text-blue-400/70">지</span> <span className="text-blue-400 font-bold">{card.stats.intel}</span></div>
-          <div><span className="text-yellow-400/70">방</span> <span className="text-yellow-400 font-bold">{card.stats.defense}</span></div>
-        </div>
-      ) : (
-        (() => {
-          const lvlBonus = (owned?.level || 1) - 1;
-          const defBonus = Math.floor(lvlBonus * 0.5);
+      {(() => {
+        const lvlBonus = (owned?.level || 1) - 1;
+        const defBonus = Math.floor(lvlBonus * 0.5);
+        const stats = [
+          { key: 'attack' as const, label: '무', labelLong: '무력', color: 'red', bonus: lvlBonus },
+          { key: 'command' as const, label: '통', labelLong: '통솔', color: 'green', bonus: lvlBonus },
+          { key: 'intel' as const, label: '지', labelLong: '지력', color: 'blue', bonus: lvlBonus },
+          { key: 'defense' as const, label: '방', labelLong: '방어', color: 'yellow', bonus: defBonus },
+        ];
+
+        if (size === 'lg') return null;
+
+        if (size === 'sm') {
           return (
-            <div className={`grid grid-cols-4 px-1.5 text-center text-white ${size === 'lg' ? 'mt-2 gap-1.5' : 'mt-1 gap-1'}`}>
-              <div>
-                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-red-400/70 leading-tight`}>무력</div>
-                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-red-400`}>
-                  {card.stats.attack + lvlBonus}
-                  {lvlBonus > 0 && <span className="text-[9px] text-red-300/60 ml-0.5">+{lvlBonus}</span>}
-                </div>
-              </div>
-              <div>
-                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-green-400/70 leading-tight`}>통솔</div>
-                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-green-400`}>
-                  {card.stats.command + lvlBonus}
-                  {lvlBonus > 0 && <span className="text-[9px] text-green-300/60 ml-0.5">+{lvlBonus}</span>}
-                </div>
-              </div>
-              <div>
-                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-blue-400/70 leading-tight`}>지력</div>
-                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-blue-400`}>
-                  {card.stats.intel + lvlBonus}
-                  {lvlBonus > 0 && <span className="text-[9px] text-blue-300/60 ml-0.5">+{lvlBonus}</span>}
-                </div>
-              </div>
-              <div>
-                <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-yellow-400/70 leading-tight`}>방어</div>
-                <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-base'} text-yellow-400`}>
-                  {card.stats.defense + defBonus}
-                  {defBonus > 0 && <span className="text-[9px] text-yellow-300/60 ml-0.5">+{defBonus}</span>}
-                </div>
-              </div>
+            <div className="grid grid-cols-4 px-0.5 mt-1 text-center text-[9px] leading-tight">
+              {stats.map(({ key, label, color }) => (
+                <div key={key}><span className={`text-${color}-400/70`}>{label}</span> <span className={`text-${color}-400 font-bold`}>{card.stats[key]}</span></div>
+              ))}
             </div>
           );
-        })()
-      )}
+        }
+
+        return (
+          <div className={`grid grid-cols-4 px-1 text-center text-white bg-black/20 rounded mx-1.5 ${size === 'lg' ? 'mt-2 gap-1.5 py-1' : 'mt-1 gap-0.5 py-0.5'}`}>
+            {stats.map(({ key, label, labelLong, color, bonus }) => {
+              const value = card.stats[key] + bonus;
+              return (
+                <div key={key}>
+                  <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-${color}-400/70 leading-tight`}>
+                    {size === 'lg' ? labelLong : label}
+                  </div>
+                  <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-sm'} text-${color}-400`}>
+                    {value}
+                    {bonus > 0 && <span className={`text-[9px] text-${color}-300/60 ml-0.5`}>+{bonus}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Skills (only in detail mode) */}
       {showDetails && card.skills.length > 0 && size !== 'sm' && (

@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #071635;
+  --foreground: #f6f8ff;
+  --ui-bg: #071635;
+  --ui-bg-soft: #0b1f47;
+  --ui-panel: rgba(17, 33, 66, 0.78);
+  --ui-border: rgba(150, 179, 255, 0.16);
+  --ui-text-muted: #9caecc;
+  --ui-text-dim: #7383a6;
+  --ui-primary: #00c86f;
+  --ui-primary-strong: #00e082;
+  --ui-danger: #dc2626;
+  --ui-accent: #f59e0b;
 }
 
 @theme inline {
@@ -11,14 +21,49 @@
 }
 
 body {
-  background: var(--background);
+  background: radial-gradient(circle at 50% -10%, #15346f 0%, #071635 45%, #06122b 100%);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+}
+
+@layer components {
+  .ui-page {
+    background: linear-gradient(180deg, rgba(11, 31, 71, 0.95) 0%, rgba(6, 18, 43, 0.95) 100%);
+  }
+
+  .ui-panel {
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-border);
+    backdrop-filter: blur(8px);
+  }
+
+  .ui-btn {
+    @apply inline-flex items-center justify-center rounded-xl font-bold transition-all active:scale-95;
+  }
+
+  .ui-btn-primary {
+    background: linear-gradient(135deg, var(--ui-primary) 0%, var(--ui-primary-strong) 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 28px rgba(0, 200, 111, 0.28);
+  }
+
+  .ui-btn-danger {
+    background: linear-gradient(135deg, #b91c1c 0%, var(--ui-danger) 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(185, 28, 28, 0.28);
+  }
+
+  .ui-btn-neutral {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f5ff;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(8px);
+  }
 }
 
 html, body {
@@ -50,35 +95,6 @@ html, body {
    Booster Pack UX - Animations & Effects
    ============================================================ */
 
-/* 3D card flip */
-.card-flip-container {
-  perspective: 800px;
-}
-
-.card-flip-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.card-flip-inner.flipped {
-  transform: rotateY(180deg);
-}
-
-.card-flip-front,
-.card-flip-back {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.card-flip-front {
-  transform: rotateY(180deg);
-}
-
 /* Pack fan-spread */
 @keyframes packSlideIn {
   from { opacity: 0; transform: translateY(40px) scale(0.8); }
@@ -104,12 +120,6 @@ html, body {
   30% { opacity: 0; }
   50% { opacity: 1; }
   100% { opacity: 0; transform: scale(1.5); }
-}
-
-/* Cards dealing from pack */
-@keyframes cardDeal {
-  from { opacity: 0; transform: translateY(-60px) scale(0.3) rotate(10deg); }
-  to { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
 }
 
 /* Grade 1: Subtle shine */
@@ -179,11 +189,6 @@ html, body {
   100% { transform: scale(5); opacity: 0; }
 }
 
-@keyframes legendZoomIn {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.6); }
-}
-
 @keyframes rainbowBorder {
   0% { border-color: #ff0000; box-shadow: 0 0 30px #ff000066, 0 0 60px #ff000033; }
   14% { border-color: #ff8800; box-shadow: 0 0 30px #ff880066, 0 0 60px #ff880033; }
@@ -198,19 +203,6 @@ html, body {
 @keyframes rainbowParticle {
   0% { transform: translateY(0) translateX(0) scale(1) rotate(0deg); opacity: 1; filter: hue-rotate(0deg); }
   100% { transform: translateY(var(--py, -120px)) translateX(var(--px, 20px)) scale(0) rotate(360deg); opacity: 0; filter: hue-rotate(360deg); }
-}
-
-/* Gold flash overlay for legendary */
-@keyframes goldFlash {
-  0% { opacity: 0; }
-  15% { opacity: 0.8; }
-  100% { opacity: 0; }
-}
-
-/* Summary screen */
-@keyframes summaryCardIn {
-  from { opacity: 0; transform: translateY(30px) scale(0.85); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes pulseGlow {
