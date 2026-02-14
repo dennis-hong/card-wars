@@ -277,7 +277,7 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
   }, [presets]);
 
   return (
-    <div className="min-h-screen ui-page p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+    <div className="h-screen ui-page p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain">
       <style jsx>{`
         @keyframes enhanceBadgePulse {
           0%, 100% { transform: scale(1); opacity: 0.9; }

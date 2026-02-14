@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { GameStateProvider } from '@/context/GameStateContext';
+import GameToasts from '@/components/shell/GameToasts';
 
 export const metadata: Metadata = {
   title: "Warlords: Card Wars",
@@ -21,7 +23,11 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="antialiased">
-        {children}
+        <GameStateProvider>
+          <GameToasts>
+            {children}
+          </GameToasts>
+        </GameStateProvider>
       </body>
     </html>
   );
