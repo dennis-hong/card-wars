@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { SFX } from '@/lib/sound';
 
-export default function DeckSavedPage() {
+function DeckSavedPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const savedDeckName = searchParams.get('name') ?? '덱';
@@ -38,5 +39,19 @@ export default function DeckSavedPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DeckSavedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen ui-page flex items-center justify-center p-4">
+          <div className="text-center text-sm text-gray-400">페이지를 불러오는 중...</div>
+        </div>
+      }
+    >
+      <DeckSavedPageContent />
+    </Suspense>
   );
 }

@@ -7,6 +7,14 @@ import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
 import CardDetailModal from '@/components/card/CardDetailModal';
 import { SFX } from '@/lib/sound';
+import { CARD_SLOT_SIZE_CLASSES } from '@/lib/display-constants';
+import {
+  buildOwnedByCardId,
+  buildOwnedCardIdSet,
+  buildOwnedCardCounts,
+  canEnhanceOwnedCard,
+  calculateEnhanceFuel,
+} from '@/lib/card-utils';
 
 interface Props {
   ownedCards: OwnedCard[];
@@ -28,12 +36,6 @@ type FilterPreset = {
 };
 
 const FILTER_PRESET_KEY = 'collection-filter-presets-v1';
-
-const SLOT_SIZE_CLASSES = {
-  sm: 'w-24 h-36',
-  md: 'w-40 h-56',
-  lg: 'w-52 h-72',
-};
 
 function normalizePreset(raw: Partial<FilterPreset>, index: number): FilterPreset {
   const filterType = raw.filterType === 'warrior' || raw.filterType === 'tactic' ? raw.filterType : 'all';
@@ -59,7 +61,7 @@ function LockedCardSlot({ card, size = 'sm' }: { card: Card; size?: 'sm' | 'md' 
 
   return (
     <div
-      className={`relative ${SLOT_SIZE_CLASSES[size]} rounded-lg overflow-hidden border border-slate-600/70 shadow-lg bg-slate-950/90`}
+      className={`relative ${CARD_SLOT_SIZE_CLASSES[size]} rounded-lg overflow-hidden border border-slate-600/70 shadow-lg bg-slate-950/90`}
       style={{ background: `linear-gradient(140deg, #0b0f1a, ${gradeColor}24)` }}
       aria-label={`${card.name} 미보유`}
     >
@@ -108,45 +110,19 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
     }
   });
 
-  const ownedCardIds = useMemo(() => new Set(ownedCards.map((card) => card.cardId)), [ownedCards]);
-
-  const cardIdCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const owned of ownedCards) {
-      counts[owned.cardId] = (counts[owned.cardId] || 0) + 1;
-    }
-    return counts;
-  }, [ownedCards]);
-
-  const ownedByCardId = useMemo(() => {
-    const grouped = new Map<string, OwnedCard[]>();
-    for (const owned of ownedCards) {
-      const bucket = grouped.get(owned.cardId) ?? [];
-      bucket.push(owned);
-      grouped.set(owned.cardId, bucket);
-    }
-
-    for (const bucket of grouped.values()) {
-      bucket.sort((a, b) => b.level - a.level || b.duplicates - a.duplicates || a.instanceId.localeCompare(b.instanceId));
-    }
-
-    return grouped;
-  }, [ownedCards]);
+  const ownedCardIds = useMemo(() => buildOwnedCardIdSet(ownedCards), [ownedCards]);
+  const cardIdCounts = useMemo(() => buildOwnedCardCounts(ownedCards), [ownedCards]);
+  const ownedByCardId = useMemo(() => buildOwnedByCardId(ownedCards), [ownedCards]);
 
   const collectionRate = Math.round((ownedCardIds.size / ALL_CARDS.length) * 100);
   const missingCount = ALL_CARDS.length - ownedCardIds.size;
 
   const canEnhance = useCallback((owned: OwnedCard): boolean => {
-    const cardData = getCardById(owned.cardId);
-    if (!cardData) return false;
-    if (owned.level >= MAX_LEVEL[cardData.grade as Grade]) return false;
-    const extraCopies = (cardIdCounts[owned.cardId] || 1) - 1;
-    return owned.duplicates > 0 || extraCopies > 0;
+    return canEnhanceOwnedCard(owned, cardIdCounts);
   }, [cardIdCounts]);
 
   const getEnhanceFuel = useCallback((owned: OwnedCard): number => {
-    const extraCopies = (cardIdCounts[owned.cardId] || 1) - 1;
-    return owned.duplicates + extraCopies;
+    return calculateEnhanceFuel(owned, cardIdCounts);
   }, [cardIdCounts]);
 
   const filteredCards = useMemo(() => {

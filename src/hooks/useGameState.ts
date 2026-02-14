@@ -6,60 +6,7 @@ import { getCardById, ALL_CARDS } from '@/data/cards';
 import { TITLES } from '@/data/titles';
 import { generateId } from '@/lib/uuid';
 import { openPack } from '@/lib/gacha';
-
-const STORAGE_KEY = 'cardwars_save';
-
-function createInitialState(): GameState {
-  return {
-    initialized: false,
-    ownedCards: [],
-    decks: [],
-    activeDeckId: null,
-    boosterPacks: [
-      { id: generateId(), type: 'normal', opened: false },
-      { id: generateId(), type: 'normal', opened: false },
-      { id: generateId(), type: 'rare', opened: false },
-    ],
-    currency: 0,
-    stats: { wins: 0, losses: 0, streak: 0, maxStreak: 0, scenariosCleared: 0 },
-    earnedTitles: [],
-    activeTitle: null,
-  };
-}
-
-function loadState(): GameState {
-  if (typeof window === 'undefined') return createInitialState();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Migration: add missing fields
-      if (!parsed.earnedTitles) parsed.earnedTitles = [];
-      if (!parsed.activeTitle) parsed.activeTitle = null;
-      if (parsed.stats && parsed.stats.maxStreak === undefined) {
-        parsed.stats.maxStreak = parsed.stats.streak || 0;
-      }
-      // Clean stale deck references
-      if (parsed.decks && parsed.ownedCards) {
-        const ownedIds = new Set((parsed.ownedCards as OwnedCard[]).map((c: OwnedCard) => c.instanceId));
-        parsed.decks = (parsed.decks as Deck[]).map((d: Deck) => ({
-          ...d,
-          warriors: d.warriors.filter((w) => ownedIds.has(w.instanceId)),
-          tactics: d.tactics.filter((t) => ownedIds.has(t)),
-        }));
-      }
-      return parsed;
-    }
-  } catch { /* ignore */ }
-  return createInitialState();
-}
-
-function saveState(state: GameState) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch { /* ignore */ }
-}
+import { createInitialState, loadState, saveState } from '@/lib/storage';
 
 // Remove stale deck references when a card is removed from ownedCards
 function cleanDecksAfterRemoval(decks: Deck[], removedInstanceId: string): Deck[] {

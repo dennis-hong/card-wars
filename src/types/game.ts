@@ -19,6 +19,76 @@ export interface Skill {
   type: 'active' | 'passive' | 'ultimate';
 }
 
+export type CardType = 'warrior' | 'tactic';
+export type CardCategory = 'warrior' | 'tactic';
+export type TacticCardId =
+  | 't-fire'
+  | 't-ambush'
+  | 't-chain'
+  | 't-taunt'
+  | 't-heal'
+  | 't-buff'
+  | 't-rockfall'
+  | 't-counter';
+
+export type BattleFieldEffect =
+  | 'disable_fire'
+  | 'defense_plus_2'
+  | 'skip_front_first_turn'
+  | 'attack_plus_2'
+  | 'wu_bonus'
+  | 'front_defense_plus_3'
+  | 'back_attack_minus_2'
+  | 'fire_boost'
+  | 'ambush_boost'
+  | 'morale_boost';
+export type StatusEffectType =
+  | 'stun'
+  | 'defense_up'
+  | 'attack_up'
+  | 'intel_down'
+  | 'defense_stack'
+  | 'evasion'
+  | 'taunt'
+  | 'command_down'
+  | 'tactic_nullify'
+  | 'back_attack'
+  | 'ultimate_used';
+export type BattleSynergyEffect =
+  | '방어+1'
+  | '방어+2'
+  | '무력+1'
+  | '무력+2'
+  | '지력+1'
+  | '지력+2'
+  | '통솔+1'
+  | '통솔+2';
+
+export type BattleSynergyTier = 'minor' | 'major';
+export type BattleActionType =
+  | 'turn_start'
+  | 'tactic_use'
+  | 'passive_skill'
+  | 'active_skill'
+  | 'ultimate_skill'
+  | 'attack'
+  | 'stun_skip'
+  | 'forced_skip'
+  | 'turn_end';
+export type BattlePhase = 'tactic' | 'combat' | 'result';
+export type CombatResult = 'win' | 'lose' | 'draw' | null;
+export type CombatEventType = 'damage' | 'heal' | 'skill' | 'death' | 'miss';
+export type BattleEventType = 'start' | 'tactic' | 'combat' | 'result';
+export type CombatLogType = CombatEventType | BattleLogReason;
+export type BattleLogReason = 'field_event';
+export type StreakPackReward = 'rare' | 'hero';
+
+export interface BattleSynergy {
+  faction: Faction;
+  effect: BattleSynergyEffect;
+  level: BattleSynergyTier;
+}
+
 export interface WarriorCard {
   id: string;
   type: 'warrior';
@@ -27,6 +97,7 @@ export interface WarriorCard {
   grade: Grade;
   stats: WarriorStats;
   skills: Skill[];
+  image?: string;
 }
 
 export type TacticStat = '지력' | '무력' | 'none';
@@ -88,7 +159,7 @@ export interface BoosterPack {
 export interface BattleFieldEvent {
   name: string;
   description: string;
-  effect: string; // describes the mechanical effect
+  effect: BattleFieldEffect; // describes the mechanical effect
 }
 
 export interface BattleWarrior {
@@ -105,13 +176,13 @@ export interface BattleWarrior {
 }
 
 export interface StatusEffect {
-  type: 'stun' | 'defense_up' | 'attack_up' | 'intel_down' | 'defense_stack' | 'evasion' | 'taunt' | 'command_down' | 'tactic_nullify' | 'back_attack' | 'ultimate_used';
+  type: StatusEffectType;
   value: number;
   turnsLeft: number;
 }
 
 export interface CombatEvent {
-  type: 'damage' | 'heal' | 'skill' | 'death' | 'miss';
+  type: CombatEventType;
   targetInstanceId: string;
   value?: number;           // damage or heal amount
   skillName?: string;       // for skill activation display
@@ -132,19 +203,19 @@ export interface BattleTactic {
 
 export type BattleAction =
   | { type: 'turn_start'; turn: number }
-  | { type: 'tactic_use'; side: 'player' | 'enemy'; tacticInstanceId: string; tacticCardId: string; tacticName: string; events: CombatEvent[]; log: string[] }
+  | { type: 'tactic_use'; side: 'player' | 'enemy'; tacticInstanceId: string; tacticCardId: TacticCardId; tacticName: string; events: CombatEvent[]; log: string[] }
   | { type: 'passive_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; log: string[] }
   | { type: 'active_skill'; warriorId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'ultimate_skill'; warriorId: string; cardId: string; skillName: string; side: 'player' | 'enemy'; events: CombatEvent[]; log: string[] }
   | { type: 'attack'; attackerId: string; targetId: string; side: 'player' | 'enemy'; damage: number; events: CombatEvent[]; log: string[]; skillName?: string }
   | { type: 'stun_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; log: string[] }
-  | { type: 'forced_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; reason: 'field_event'; log: string[] }
-  | { type: 'turn_end'; newTurn: number; phase: 'tactic' | 'result'; result: 'win' | 'lose' | 'draw' | null; log: string[] };
+  | { type: 'forced_skip'; warriorId: string; warriorName: string; side: 'player' | 'enemy'; reason: BattleLogReason; log: string[] }
+  | { type: 'turn_end'; newTurn: number; phase: Exclude<BattlePhase, 'combat'>; result: CombatResult; log: string[] };
 
 export interface BattleState {
   turn: number;
   maxTurns: number;
-  phase: 'tactic' | 'combat' | 'result';
+  phase: BattlePhase;
   player: {
     warriors: BattleWarrior[];
     tactics: BattleTactic[];
@@ -157,9 +228,9 @@ export interface BattleState {
   };
   fieldEvent: BattleFieldEvent;
   log: string[];
-  result: 'win' | 'lose' | 'draw' | null;
+  result: CombatResult;
   combatEvents: CombatEvent[];
-  activeSynergies?: { faction: string; effect: string; side: 'player' | 'enemy' }[];
+  activeSynergies?: (BattleSynergy & { side: 'player' | 'enemy' })[];
   ultimateTriggered?: { cardId: string; skillName: string } | null;
 }
 

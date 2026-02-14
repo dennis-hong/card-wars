@@ -7,6 +7,11 @@ import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
 import CardDetailModal from '@/components/card/CardDetailModal';
 import { SFX } from '@/lib/sound';
+import {
+  buildOwnedByInstanceId,
+  buildOwnedCardCounts,
+  resolveDeckSynergies,
+} from '@/lib/card-utils';
 import { generateId } from '@/lib/uuid';
 
 interface Props {
@@ -22,29 +27,6 @@ function laneToLabel(lane: Lane) {
   return lane === 'front' ? '전위' : lane === 'mid' ? '중위' : '후위';
 }
 
-// Synergy preview helper
-function getSynergyPreview(warriors: DeckSlot[], ownedCards: OwnedCard[]): { faction: string; count: number; effect: string; level: 'minor' | 'major' }[] {
-  const factions: string[] = [];
-  for (const w of warriors) {
-    const owned = ownedCards.find(c => c.instanceId === w.instanceId);
-    if (!owned) continue;
-    const card = getCardById(owned.cardId);
-    if (card?.type === 'warrior') factions.push(card.faction);
-  }
-  const counts: Record<string, number> = {};
-  for (const f of factions) counts[f] = (counts[f] || 0) + 1;
-  const effectMap: Record<string, [string, string]> = {
-    '위': ['방어+1', '방어+2'], '촉': ['무력+1', '무력+2'],
-    '오': ['지력+1', '지력+2'], '군벌': ['통솔+1', '통솔+2'],
-  };
-  const synergies: { faction: string; count: number; effect: string; level: 'minor' | 'major' }[] = [];
-  for (const [f, c] of Object.entries(counts)) {
-    if (c >= 3) synergies.push({ faction: f, count: c, effect: effectMap[f]?.[1] || '', level: 'major' });
-    else if (c >= 2) synergies.push({ faction: f, count: c, effect: effectMap[f]?.[0] || '', level: 'minor' });
-  }
-  return synergies;
-}
-
 export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props) {
   const [deckName, setDeckName] = useState(deck?.name || '새 덱');
   // Filter out stale slots where the owned card no longer exists
@@ -57,25 +39,22 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   const [tab, setTab] = useState<Tab>('warriors');
   const [selectedLane, setSelectedLane] = useState<Lane>('front');
   const [selectedOwnedCard, setSelectedOwnedCard] = useState<OwnedCard | null>(null);
-
-  const ownedWarriors = useMemo(() =>
-    ownedCards.filter((oc) => getCardById(oc.cardId)?.type === 'warrior'), [ownedCards]);
-  const ownedTactics = useMemo(() =>
-    ownedCards.filter((oc) => getCardById(oc.cardId)?.type === 'tactic'), [ownedCards]);
-
+  const ownedByInstanceId = useMemo(() => buildOwnedByInstanceId(ownedCards), [ownedCards]);
+  const cardIdCounts = useMemo(() => buildOwnedCardCounts(ownedCards), [ownedCards]);
+  const ownedWarriors = useMemo(
+    () => ownedCards.filter((oc) => getCardById(oc.cardId)?.type === 'warrior'),
+    [ownedCards]
+  );
+  const ownedTactics = useMemo(
+    () => ownedCards.filter((oc) => getCardById(oc.cardId)?.type === 'tactic'),
+    [ownedCards]
+  );
   const usedWarriorIds = new Set(warriors.map((w) => w.instanceId));
   const usedTacticIds = new Set(tactics);
   const occupiedLanes = new Set(warriors.map((w) => w.lane));
-  const cardIdCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const owned of ownedCards) {
-      counts[owned.cardId] = (counts[owned.cardId] || 0) + 1;
-    }
-    return counts;
-  }, [ownedCards]);
 
   // Synergy preview
-  const synergyPreview = useMemo(() => getSynergyPreview(warriors, ownedCards), [warriors, ownedCards]);
+  const synergyPreview = useMemo(() => resolveDeckSynergies(warriors, ownedByInstanceId), [warriors, ownedByInstanceId]);
 
   const handleAddWarrior = (instanceId: string) => {
     if (warriors.length >= 3 || usedWarriorIds.has(instanceId)) return;
@@ -242,10 +221,10 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
         <div className="text-sm text-gray-400 mb-2">덱 구성 (무장 3필수 + 전법 0~2)</div>
 
         {/* Warriors in lanes */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-3 gap-2 mb-3">
           {(['front', 'mid', 'back'] as Lane[]).map((lane) => {
             const slot = warriors.find((w) => w.lane === lane);
-            const owned = slot ? ownedCards.find((c) => c.instanceId === slot.instanceId) : null;
+            const owned = slot ? ownedByInstanceId.get(slot.instanceId) ?? null : null;
             const card = owned ? getCardById(owned.cardId) : null;
             const laneLabel = lane === 'front' ? '전위' : lane === 'mid' ? '중위' : '후위';
             return (
@@ -293,7 +272,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
         <div className="flex gap-2 justify-center">
           {[0, 1].map((i) => {
             const tid = tactics[i];
-            const owned = tid ? ownedCards.find((c) => c.instanceId === tid) : null;
+            const owned = tid ? ownedByInstanceId.get(tid) ?? null : null;
             const card = owned ? getCardById(owned.cardId) : null;
             return (
               <div
