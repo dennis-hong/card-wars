@@ -1,7 +1,19 @@
 'use client';
 
+import Image from 'next/image';
 import { TacticCard, GRADE_COLORS, OwnedCard } from '@/types/game';
 import { getTacticEffectLines } from '@/data/cards';
+
+const TACTIC_IMAGES: Record<string, string> = {
+  't-fire': '/images/tactics/fire.png',
+  't-ambush': '/images/tactics/ambush.png',
+  't-chain': '/images/tactics/chain.png',
+  't-taunt': '/images/tactics/taunt.png',
+  't-heal': '/images/tactics/heal.png',
+  't-buff': '/images/tactics/buff.png',
+  't-rockfall': '/images/tactics/rockfall.png',
+  't-counter': '/images/tactics/counter.png',
+};
 
 interface Props {
   card: TacticCard;
@@ -53,9 +65,23 @@ export default function TacticCardView({ card, owned, size = 'md', onClick, sele
         <div className={`text-gray-400 ${size === 'sm' ? '' : 'text-xs'}`}>전법</div>
       </div>
 
-      {/* Emoji icon */}
-      <div className={`flex items-center justify-center bg-black/20 rounded mx-2 ${size === 'sm' ? 'mt-1 py-1' : 'mt-2 py-2'}`}>
-        <span className={size === 'lg' ? 'text-5xl' : size === 'md' ? 'text-4xl' : 'text-3xl'}>{card.emoji}</span>
+      {/* Tactic image */}
+      <div className={`relative overflow-hidden rounded mx-2 ${size === 'sm' ? 'mt-1 h-14' : size === 'md' ? 'mt-2 h-24' : 'mt-2 h-32'}`}>
+        {TACTIC_IMAGES[card.id] ? (
+          <Image
+            src={TACTIC_IMAGES[card.id]}
+            alt={card.name}
+            fill
+            className="object-cover"
+            sizes={size === 'sm' ? '80px' : size === 'md' ? '144px' : '192px'}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-black/20">
+            <span className={size === 'lg' ? 'text-5xl' : size === 'md' ? 'text-4xl' : 'text-3xl'}>{card.emoji}</span>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <span className={`absolute bottom-1 right-1 ${size === 'sm' ? 'text-lg' : 'text-2xl'}`}>{card.emoji}</span>
       </div>
 
       {/* Description */}
