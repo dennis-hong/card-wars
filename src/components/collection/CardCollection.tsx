@@ -75,7 +75,7 @@ function LockedCardSlot({ card, size = 'sm' }: { card: Card; size?: 'sm' | 'md' 
 
       <div className="relative mx-2 mt-1 aspect-square rounded border border-slate-700/70 bg-black/60 flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-black/80" />
-        <span className="text-4xl text-slate-100/20">{card.type === 'warrior' ? '⚔️' : card.emoji}</span>
+        <span className="text-4xl text-slate-100/20">{card.type === 'warrior' ? '⚔️' : '전법'}</span>
         <div className="absolute inset-0 bg-black/55" />
         <span className="absolute text-2xl">🔒</span>
       </div>

@@ -7,6 +7,7 @@ import { getWarriorById, getTacticById } from '@/data/cards';
 import { getWarriorImage } from '@/lib/warrior-images';
 import { initBattle, applyTactic, resolveCombat, selectAITactic } from '@/lib/battle-engine';
 import { SFX } from '@/lib/sound';
+import { TACTIC_IMAGES } from '@/lib/tactic-images';
 
 interface Props {
   deck: Deck;
@@ -327,7 +328,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
   const [showSynergy, setShowSynergy] = useState(false);
   const [showUltimate, setShowUltimate] = useState<{ cardId: string; skillName: string } | null>(null);
   const [turnAnnounce, setTurnAnnounce] = useState<string | null>(null);
-  const [tacticAnnounce, setTacticAnnounce] = useState<{ name: string; emoji: string; side: 'player' | 'enemy' } | null>(null);
+  const [tacticAnnounce, setTacticAnnounce] = useState<{ name: string; cardId: string; side: 'player' | 'enemy' } | null>(null);
   const [liveLog, setLiveLog] = useState<LiveLogEntry[]>([]);
   const [slashEffect, setSlashEffect] = useState<{ style: React.CSSProperties; side: 'player' | 'enemy' } | null>(null);
   // Tactic card animation: 'activating' = glow+fly, 'fading' = shrink+fade, 'removed' = hidden
@@ -454,7 +455,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
             }
           }
 
-          setTacticAnnounce({ name: action.tacticName, emoji: action.tacticEmoji, side: action.side });
+          setTacticAnnounce({ name: action.tacticName, cardId: action.tacticCardId, side: action.side });
           SFX.skillActivate();
           action.log.forEach(msg => addLiveLog(msg));
           await delay(500);
@@ -813,7 +814,7 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
     }
 
     return {
-      title: `${tc.emoji} ${tc.name}`,
+      title: tc.name,
       lines,
       warnings,
     };
@@ -1165,7 +1166,13 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
               <div className="text-xs font-bold mb-1" style={{ color: tacticAnnounce.side === 'player' ? '#93c5fd' : '#fca5a5' }}>
                 {tacticAnnounce.side === 'player' ? '아군' : '적군'} 전법
               </div>
-              <div className="text-3xl mb-1">{tacticAnnounce.emoji}</div>
+              {TACTIC_IMAGES[tacticAnnounce.cardId] ? (
+                <div className="relative w-12 h-12 mx-auto mb-1 rounded overflow-hidden">
+                  <Image src={TACTIC_IMAGES[tacticAnnounce.cardId]} alt={tacticAnnounce.name} fill className="object-cover" sizes="48px" />
+                </div>
+              ) : (
+                <div className="text-3xl mb-1">전법</div>
+              )}
               <div className="text-xl font-black text-white">{tacticAnnounce.name}</div>
             </div>
           </div>
@@ -1458,7 +1465,13 @@ export default function BattleArena({ deck, ownedCards, wins, onBattleEnd, onExi
                   <div className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-black/45 border border-white/20 text-white/90">
                     Lv.{Math.max(1, t.level || 1)}
                   </div>
-                  <div className="text-base sm:text-lg mb-0.5">{tc.emoji}</div>
+                  {TACTIC_IMAGES[tc.id] ? (
+                    <div className="relative w-8 h-8 mx-auto mb-0.5 rounded overflow-hidden">
+                      <Image src={TACTIC_IMAGES[tc.id]} alt={tc.name} fill className="object-cover" sizes="32px" />
+                    </div>
+                  ) : (
+                    <div className="text-base sm:text-lg mb-0.5">전법</div>
+                  )}
                   <div className="font-bold">{tc.name}</div>
                   <div className="text-[9px] sm:text-[10px] opacity-60 mt-0.5 sm:block hidden">{tc.description}</div>
                 </button>

@@ -438,7 +438,7 @@ export function applyTactic(
     newState.combatEvents = events;
     return {
       state: newState,
-      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticCardId: tacticCard.id, tacticName: tacticCard.name, events, log: logLines },
     };
   }
 
@@ -450,7 +450,7 @@ export function applyTactic(
     newState.combatEvents = events;
     return {
       state: newState,
-      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+      action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticCardId: tacticCard.id, tacticName: tacticCard.name, events, log: logLines },
     };
   }
 
@@ -460,7 +460,7 @@ export function applyTactic(
   events.push({
     type: 'skill',
     targetInstanceId: actor.warriors[0]?.instanceId || '',
-    skillName: `${tacticCard.emoji} ${tacticCard.name}`,
+    skillName: tacticCard.name,
   });
 
   switch (tacticCard.id) {
@@ -595,7 +595,7 @@ export function applyTactic(
   newState.combatEvents = events;
   return {
     state: newState,
-    action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticName: tacticCard.name, tacticEmoji: tacticCard.emoji, events, log: logLines },
+    action: { type: 'tactic_use', side, tacticInstanceId: tactic.instanceId, tacticCardId: tacticCard.id, tacticName: tacticCard.name, events, log: logLines },
   };
 }
 
