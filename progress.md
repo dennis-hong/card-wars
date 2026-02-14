@@ -132,3 +132,20 @@ Original prompt: 웹 게임 개발 스킬을 활용해서 현재 UI 를 검토�
   - `npm run lint` passed.
   - `npm run build` passed.
   - Manual Playwright capture sequence produced immediate 0/5 -> 5/5 reveal transition without staged multi-flash loop (`output/web-game/booster-revealall-fix/`).
+- New request (2026-02-14): 컬렉션 화면을 전체 카드 도감형으로 전환하고, 미보유 카드는 실루엣/잠금 형태로 노출하며 보유 카드만 상세 진입 가능하게 개선.
+- Implemented in `src/components/collection/CardCollection.tsx`:
+  - 데이터 소스를 `ALL_CARDS` 기준으로 전환하고 보유 상태를 카드 ID 단위로 집계.
+  - 미보유 카드용 `LockedCardSlot` 추가(실루엣/잠금 오버레이).
+  - 보유/미보유 필터(`전체 상태/보유/미보유`) 추가 및 프리셋 저장 포맷 마이그레이션 대응.
+  - 상세 진입을 `CardDetailModal` 기반으로 통합하고, 보유 카드에만 상세/강화 액션 노출.
+  - 진행도 패널에 보유/미보유 종 수를 함께 표기.
+- Build blocker fixes discovered during verification:
+  - `src/components/card/WarriorCardView.tsx`: 도달 불가 `size === 'lg'` 분기 정리로 TS 오류 해결.
+  - `src/components/deck/DeckEditor.tsx`: `selectedCardData`를 `null` 정규화(`undefined` 제거)해 `CardDetailModal` 타입 호환.
+- Verification completed:
+  - `npm run lint` pass.
+  - `npm run build` pass.
+  - Playwright runtime check on `http://localhost:3100`:
+    - 미보유 계정 상태에서 컬렉션 진입 시 전체 카드가 잠금 실루엣으로 노출됨 확인.
+    - 로컬 스토리지에 보유 카드 1장(조조) 주입 후 컬렉션에서 해당 카드만 상세 모달 진입/강화 버튼 노출 확인.
+    - 미보유 카드 클릭 시 상세 모달이 열리지 않음 확인.

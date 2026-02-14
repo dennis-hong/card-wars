@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PackType, PACK_INFO, Card, Grade, GRADE_COLORS, GRADE_NAMES, BoosterPack } from '@/types/game';
+import { PackType, PACK_INFO, Card, Grade, GRADE_COLORS, GRADE_NAMES, BoosterPack, OwnedCard } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
+import CardDetailModal from '@/components/card/CardDetailModal';
 import { SFX } from '@/lib/sound';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   onOpen: (packId: string) => Card[] | null;
   onComplete: () => void;
   ownedCardIds?: Set<string>;
+  ownedCards?: OwnedCard[];
 }
 
 type Phase = 'select' | 'tearing' | 'revealing' | 'summary';
@@ -485,12 +487,14 @@ function CardRevealSlot({
 
 function SummaryScreen({
   cards,
-  ownedCardIds,
+  ownedBefore,
+  onCardClick,
   onDone,
   remainingPacks,
 }: {
   cards: Card[];
-  ownedCardIds: Set<string>;
+  ownedBefore: Set<string>;
+  onCardClick: (card: Card, isNew: boolean) => void;
   onDone: () => void;
   remainingPacks: number;
 }) {
@@ -517,15 +521,16 @@ function SummaryScreen({
         {sorted.map((card, i) => {
           const cardData = getCardById(card.id);
           if (!cardData) return null;
-          const isNew = !ownedCardIds.has(card.id);
+          const isNew = !ownedBefore.has(card.id);
 
           return (
             <motion.div
               key={`${card.id}-${i}`}
-              className="relative"
+              className="relative cursor-pointer"
               initial={{ opacity: 0, y: 20, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: i * 0.07, type: 'spring', stiffness: 180, damping: 20 }}
+              onClick={() => onCardClick(card, isNew)}
             >
               {cardData.type === 'warrior' ? (
                 <WarriorCardView card={cardData} size="md" showDetails />
@@ -554,7 +559,7 @@ function SummaryScreen({
   );
 }
 
-export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardIds = new Set() }: Props) {
+export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardIds = new Set(), ownedCards = [] }: Props) {
   const [phase, setPhase] = useState<Phase>('select');
   const [activePackId, setActivePackId] = useState<string | null>(null);
   const [tearingPackId, setTearingPackId] = useState<string | null>(null);
@@ -565,8 +570,32 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
   const [flashTone, setFlashTone] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
   const [revealAllMode, setRevealAllMode] = useState(false);
+  const [lastObtained, setLastObtained] = useState<{ cards: Card[]; ownedBefore: Set<string> } | null>(null);
+  const [detailCard, setDetailCard] = useState<{ card: Card; isNew: boolean } | null>(null);
+  const preOpenOwnedRef = useRef<Set<string>>(new Set(ownedCardIds));
 
   const unopened = useMemo(() => packs.filter((p) => !p.opened), [packs]);
+  const recentObtainedCards = useMemo(
+    () => (lastObtained ? [...lastObtained.cards].sort((a, b) => b.grade - a.grade) : []),
+    [lastObtained]
+  );
+  const ownedCardCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const owned of ownedCards) {
+      counts[owned.cardId] = (counts[owned.cardId] || 0) + 1;
+    }
+    return counts;
+  }, [ownedCards]);
+  const representativeOwned = useMemo(() => {
+    const byId: Record<string, OwnedCard> = {};
+    for (const owned of ownedCards) {
+      const current = byId[owned.cardId];
+      if (!current || owned.level > current.level) {
+        byId[owned.cardId] = owned;
+      }
+    }
+    return byId;
+  }, [ownedCards]);
 
   useEffect(() => {
     const sync = () => setCompact(window.innerWidth < 640);
@@ -592,15 +621,19 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
 
   const startOpen = useCallback((pack: BoosterPack) => {
     if (phase !== 'select') return;
+    preOpenOwnedRef.current = new Set(ownedCardIds);
+    setDetailCard(null);
     SFX.packOpen();
     setTearingPackId(pack.id);
     setPhase('tearing');
-  }, [phase]);
+  }, [phase, ownedCardIds]);
 
   const handleTearDone = useCallback(() => {
     if (!tearingPackId) return;
     const result = onOpen(tearingPackId);
     if (!result) return;
+    const ownedBefore = new Set(preOpenOwnedRef.current);
+    setLastObtained({ cards: result, ownedBefore });
     setCards(result);
     setRevealedIndexes(new Set());
     setFocusIndex(null);
@@ -664,6 +697,7 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
   }, [phase, revealAllMode, cards, revealedIndexes]);
 
   const handleSummaryDone = useCallback(() => {
+    setDetailCard(null);
     const remaining = packs.filter((p) => !p.opened);
     if (remaining.length > 0) {
       setTearingPackId(null);
@@ -759,12 +793,23 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
   if (phase === 'summary') {
     const remaining = packs.filter((p) => !p.opened);
     return (
-      <SummaryScreen
-        cards={cards}
-        ownedCardIds={ownedCardIds}
-        onDone={handleSummaryDone}
-        remainingPacks={remaining.length}
-      />
+      <>
+        <SummaryScreen
+          cards={cards}
+          ownedBefore={preOpenOwnedRef.current}
+          onCardClick={(card, isNew) => setDetailCard({ card, isNew })}
+          onDone={handleSummaryDone}
+          remainingPacks={remaining.length}
+        />
+        <CardDetailModal
+          card={detailCard?.card ?? null}
+          owned={detailCard ? representativeOwned[detailCard.card.id] : undefined}
+          ownedCount={detailCard ? ownedCardCounts[detailCard.card.id] || 0 : 0}
+          isNew={detailCard?.isNew}
+          sourceTag="부스터 획득"
+          onClose={() => setDetailCard(null)}
+        />
+      </>
     );
   }
 
@@ -775,6 +820,40 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
         <h1 className="text-white font-extrabold text-lg tracking-wide">부스터 오픈</h1>
         <div className="text-sm text-white/70">{unopened.length}개</div>
       </div>
+
+      {phase === 'select' && lastObtained && recentObtainedCards.length > 0 && (
+        <div className="w-full max-w-5xl mb-4 sm:mb-5">
+          <div className="text-xs tracking-[0.16em] text-white/55 mb-2">LAST OBTAINED</div>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {recentObtainedCards.map((card, i) => {
+              const cardData = getCardById(card.id);
+              if (!cardData) return null;
+              const isNew = !lastObtained.ownedBefore.has(card.id);
+              return (
+                <button
+                  key={`${card.id}-recent-${i}`}
+                  type="button"
+                  onClick={() => setDetailCard({ card, isNew })}
+                  className="relative shrink-0 rounded-lg border border-white/15 bg-black/20 p-1"
+                >
+                  {cardData.type === 'warrior' ? (
+                    <WarriorCardView card={cardData} size="sm" showDetails />
+                  ) : (
+                    <TacticCardView card={cardData} size="sm" />
+                  )}
+                  <span
+                    className={`absolute -top-1.5 -right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                      isNew ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-slate-200'
+                    }`}
+                  >
+                    {isNew ? 'NEW' : 'DUP'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {unopened.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center text-white/65">
@@ -816,6 +895,15 @@ export default function BoosterPackView({ packs, onOpen, onComplete, ownedCardId
           <div className="mb-5 text-xs tracking-[0.14em] text-white/45">PACK SELECT • OPEN • REVEAL</div>
         </>
       )}
+
+      <CardDetailModal
+        card={detailCard?.card ?? null}
+        owned={detailCard ? representativeOwned[detailCard.card.id] : undefined}
+        ownedCount={detailCard ? ownedCardCounts[detailCard.card.id] || 0 : 0}
+        isNew={detailCard?.isNew}
+        sourceTag="부스터 획득"
+        onClose={() => setDetailCard(null)}
+      />
     </div>
   );
 }

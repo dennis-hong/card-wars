@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import Image from 'next/image';
-import { OwnedCard, Deck, DeckSlot, Lane, WarriorCard, GRADE_LABELS, GRADE_NAMES, GRADE_COLORS, FACTION_COLORS } from '@/types/game';
+import { OwnedCard, Deck, DeckSlot, Lane } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
+import CardDetailModal from '@/components/card/CardDetailModal';
 import { SFX } from '@/lib/sound';
 import { generateId } from '@/lib/uuid';
-import { getWarriorImage } from '@/lib/warrior-images';
 
 interface Props {
   ownedCards: OwnedCard[];
@@ -18,6 +17,10 @@ interface Props {
 }
 
 type Tab = 'warriors' | 'tactics';
+
+function laneToLabel(lane: Lane) {
+  return lane === 'front' ? '전위' : lane === 'mid' ? '중위' : '후위';
+}
 
 // Synergy preview helper
 function getSynergyPreview(warriors: DeckSlot[], ownedCards: OwnedCard[]): { faction: string; count: number; effect: string; level: 'minor' | 'major' }[] {
@@ -53,7 +56,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   );
   const [tab, setTab] = useState<Tab>('warriors');
   const [selectedLane, setSelectedLane] = useState<Lane>('front');
-  const [previewCard, setPreviewCard] = useState<{ owned: OwnedCard; card: WarriorCard } | null>(null);
+  const [selectedOwnedCard, setSelectedOwnedCard] = useState<OwnedCard | null>(null);
 
   const ownedWarriors = useMemo(() =>
     ownedCards.filter((oc) => getCardById(oc.cardId)?.type === 'warrior'), [ownedCards]);
@@ -63,6 +66,13 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   const usedWarriorIds = new Set(warriors.map((w) => w.instanceId));
   const usedTacticIds = new Set(tactics);
   const occupiedLanes = new Set(warriors.map((w) => w.lane));
+  const cardIdCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const owned of ownedCards) {
+      counts[owned.cardId] = (counts[owned.cardId] || 0) + 1;
+    }
+    return counts;
+  }, [ownedCards]);
 
   // Synergy preview
   const synergyPreview = useMemo(() => getSynergyPreview(warriors, ownedCards), [warriors, ownedCards]);
@@ -97,13 +107,6 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
     setTactics(tactics.filter((t) => t !== instanceId));
   };
 
-  const handleLongPress = (oc: OwnedCard) => {
-    const card = getCardById(oc.cardId);
-    if (card?.type === 'warrior') {
-      setPreviewCard({ owned: oc, card });
-    }
-  };
-
   const handleSave = () => {
     if (warriors.length !== 3 || tactics.length > 2) return;
     const lanes = warriors.map((w) => w.lane);
@@ -116,97 +119,105 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   };
 
   const isValid = warriors.length === 3 && tactics.length <= 2 && new Set(warriors.map((w) => w.lane)).size === 3;
+  const selectedCardData = selectedOwnedCard ? (getCardById(selectedOwnedCard.cardId) ?? null) : null;
+  const selectedOwnedCount = selectedOwnedCard ? (cardIdCounts[selectedOwnedCard.cardId] || 0) : 0;
+
+  const detailPrimaryAction = (() => {
+    if (!selectedOwnedCard || !selectedCardData) return undefined;
+
+    if (selectedCardData.type === 'warrior') {
+      const used = usedWarriorIds.has(selectedOwnedCard.instanceId);
+      if (used) {
+        return {
+          label: '덱에서 제거',
+          onClick: () => {
+            handleRemoveWarrior(selectedOwnedCard.instanceId);
+            setSelectedOwnedCard(null);
+          },
+          tone: 'danger' as const,
+          hint: `현재 무장 ${warriors.length}/3`,
+        };
+      }
+
+      if (warriors.length >= 3) {
+        return {
+          label: '무장 슬롯 가득',
+          onClick: () => {},
+          disabled: true,
+          tone: 'neutral' as const,
+          hint: '먼저 기존 무장을 제거해주세요.',
+        };
+      }
+
+      const targetLane = occupiedLanes.has(selectedLane)
+        ? (['front', 'mid', 'back'] as Lane[]).find((lane) => !occupiedLanes.has(lane))
+        : selectedLane;
+
+      if (!targetLane) {
+        return {
+          label: '배치 불가',
+          onClick: () => {},
+          disabled: true,
+          tone: 'neutral' as const,
+          hint: '배치 가능한 진영이 없습니다.',
+        };
+      }
+
+      return {
+        label: `${laneToLabel(targetLane)}에 배치`,
+        onClick: () => {
+          handleAddWarrior(selectedOwnedCard.instanceId);
+          setSelectedOwnedCard(null);
+        },
+        tone: 'primary' as const,
+        hint: `현재 선택 진영: ${laneToLabel(selectedLane)}`,
+      };
+    }
+
+    const used = usedTacticIds.has(selectedOwnedCard.instanceId);
+    if (used) {
+      return {
+        label: '덱에서 제거',
+        onClick: () => {
+          handleRemoveTactic(selectedOwnedCard.instanceId);
+          setSelectedOwnedCard(null);
+        },
+        tone: 'danger' as const,
+        hint: `현재 전법 ${tactics.length}/2`,
+      };
+    }
+
+    if (tactics.length >= 2) {
+      return {
+        label: '전법 슬롯 가득',
+        onClick: () => {},
+        disabled: true,
+        tone: 'neutral' as const,
+        hint: '먼저 기존 전법을 제거해주세요.',
+      };
+    }
+
+    return {
+      label: '전법 슬롯에 추가',
+      onClick: () => {
+        handleAddTactic(selectedOwnedCard.instanceId);
+        setSelectedOwnedCard(null);
+      },
+      tone: 'primary' as const,
+      hint: `현재 전법 ${tactics.length}/2`,
+    };
+  })();
 
   return (
     <div className="h-screen bg-gray-900 p-4 overflow-y-auto overscroll-contain pb-20">
-      {/* Card Preview Popup */}
-      {previewCard && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setPreviewCard(null)}>
-          <div className="bg-gray-900/95 backdrop-blur-md rounded-2xl p-5 max-w-xs w-full border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
-            {/* Portrait */}
-            {(() => {
-              const img = getWarriorImage(previewCard.card.id);
-              return img ? (
-                <div className="w-full h-40 rounded-xl overflow-hidden mb-4 border-2" style={{ borderColor: GRADE_COLORS[previewCard.card.grade] }}>
-                  <Image src={img} alt={previewCard.card.name} width={320} height={160} className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <div className="w-full h-32 rounded-xl bg-black/30 flex items-center justify-center mb-4 text-5xl">
-                  {previewCard.card.grade === 4 ? '🌟' : '⚔️'}
-                </div>
-              );
-            })()}
-
-            {/* Name & Info */}
-            <div className="text-center mb-3">
-              <div className="text-xl font-black text-white">{previewCard.card.name}</div>
-              <div className="text-sm" style={{ color: FACTION_COLORS[previewCard.card.faction] }}>{previewCard.card.faction}</div>
-              <div className="text-xs text-gray-400">{GRADE_LABELS[previewCard.card.grade]} {GRADE_NAMES[previewCard.card.grade]} | Lv.{previewCard.owned.level}</div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-4 gap-2 mb-4 bg-black/30 rounded-lg p-3">
-              <div className="text-center">
-                <div className="text-xs text-gray-400">⚔️ 무력</div>
-                <div className="text-lg font-bold text-red-400">{previewCard.card.stats.attack}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-400">🛡️ 통솔</div>
-                <div className="text-lg font-bold text-green-400">{previewCard.card.stats.command}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-400">🧠 지력</div>
-                <div className="text-lg font-bold text-blue-400">{previewCard.card.stats.intel}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-400">🏰 방어</div>
-                <div className="text-lg font-bold text-yellow-400">{previewCard.card.stats.defense}</div>
-              </div>
-            </div>
-
-            {/* Skills */}
-            {previewCard.card.skills.length > 0 && (
-              <div className="space-y-2 mb-4">
-                {previewCard.card.skills.map(s => (
-                  <div key={s.name} className="bg-white/5 rounded-lg p-2">
-                    <div className="text-sm font-bold text-white">
-                      <span className={s.type === 'ultimate' ? 'text-yellow-400' : s.type === 'passive' ? 'text-blue-400' : 'text-green-400'}>
-                        [{s.type === 'ultimate' ? '궁극' : s.type === 'passive' ? '패시브' : '액티브'}]
-                      </span> {s.name}
-                    </div>
-                    <div className="text-xs text-gray-400">{s.description}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex gap-2">
-              {!usedWarriorIds.has(previewCard.owned.instanceId) && warriors.length < 3 ? (
-                <button
-                  onClick={() => { handleAddWarrior(previewCard.owned.instanceId); setPreviewCard(null); }}
-                  className="flex-1 py-2 bg-blue-600 text-white font-bold rounded-lg active:scale-95"
-                >
-                  + 덱에 추가
-                </button>
-              ) : usedWarriorIds.has(previewCard.owned.instanceId) ? (
-                <button
-                  onClick={() => { handleRemoveWarrior(previewCard.owned.instanceId); setPreviewCard(null); }}
-                  className="flex-1 py-2 bg-red-600 text-white font-bold rounded-lg active:scale-95"
-                >
-                  덱에서 제거
-                </button>
-              ) : null}
-              <button
-                onClick={() => setPreviewCard(null)}
-                className="flex-1 py-2 bg-gray-700 text-white font-bold rounded-lg active:scale-95"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CardDetailModal
+        card={selectedCardData}
+        owned={selectedOwnedCard}
+        ownedCount={selectedOwnedCount}
+        sourceTag="덱 편성"
+        onClose={() => setSelectedOwnedCard(null)}
+        primaryAction={detailPrimaryAction}
+      />
 
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
@@ -248,11 +259,12 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
                 <div className="text-[10px] text-gray-500 mb-1">{laneLabel}</div>
                 {card && card.type === 'warrior' ? (
                   <div className="relative">
-                    <WarriorCardView card={card} owned={owned!} size="sm" />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRemoveWarrior(slot!.instanceId); }}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white rounded-full text-xs flex items-center justify-center"
-                    >✕</button>
+                    <WarriorCardView
+                      card={card}
+                      owned={owned!}
+                      size="sm"
+                      onClick={() => setSelectedOwnedCard(owned!)}
+                    />
                   </div>
                 ) : (
                   <div className="text-gray-500 text-xs">빈 슬롯</div>
@@ -292,11 +304,12 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
                 <div className="text-[10px] text-gray-500 mb-1">전법 {i + 1}</div>
                 {card && card.type === 'tactic' ? (
                   <div className="relative">
-                    <TacticCardView card={card} owned={owned!} size="sm" />
-                    <button
-                      onClick={() => handleRemoveTactic(tid)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white rounded-full text-xs flex items-center justify-center"
-                    >✕</button>
+                    <TacticCardView
+                      card={card}
+                      owned={owned!}
+                      size="sm"
+                      onClick={() => setSelectedOwnedCard(owned!)}
+                    />
                   </div>
                 ) : (
                   <div className="text-gray-500 text-xs">빈 슬롯</div>
@@ -343,7 +356,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
 
       {/* Tip */}
       {tab === 'warriors' && (
-        <div className="text-center text-[10px] text-gray-500 mb-3">💡 카드를 길게 누르면 상세 정보를 볼 수 있어요</div>
+        <div className="text-center text-[10px] text-gray-500 mb-3">💡 카드를 탭하면 상세에서 추가/제거할 수 있어요</div>
       )}
 
       {/* Card list */}
@@ -357,18 +370,12 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
               <div
                 key={oc.instanceId}
                 className={used ? 'opacity-30' : ''}
-                onContextMenu={(e) => { e.preventDefault(); handleLongPress(oc); }}
-                onTouchStart={() => {
-                  const timer = setTimeout(() => handleLongPress(oc), 500);
-                  const clear = () => { clearTimeout(timer); document.removeEventListener('touchend', clear); };
-                  document.addEventListener('touchend', clear, { once: true });
-                }}
               >
                 <WarriorCardView
                   card={card}
                   owned={oc}
                   size="sm"
-                  onClick={() => used ? handleRemoveWarrior(oc.instanceId) : handleAddWarrior(oc.instanceId)}
+                  onClick={() => setSelectedOwnedCard(oc)}
                   selected={used}
                   showDetails
                 />
@@ -386,7 +393,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
                   card={card}
                   owned={oc}
                   size="sm"
-                  onClick={() => used ? handleRemoveTactic(oc.instanceId) : handleAddTactic(oc.instanceId)}
+                  onClick={() => setSelectedOwnedCard(oc)}
                   selected={used}
                 />
               </div>

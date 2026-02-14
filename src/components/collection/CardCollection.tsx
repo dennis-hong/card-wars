@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { OwnedCard, Grade, Faction, GRADE_LABELS, GRADE_NAMES, GRADE_COLORS, MAX_LEVEL } from '@/types/game';
-import { getCardById, WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
+import { Card, OwnedCard, Grade, Faction, GRADE_LABELS, GRADE_COLORS, MAX_LEVEL } from '@/types/game';
+import { ALL_CARDS, getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
+import CardDetailModal from '@/components/card/CardDetailModal';
 import { SFX } from '@/lib/sound';
 
 interface Props {
@@ -13,138 +14,199 @@ interface Props {
   onBack: () => void;
 }
 
-type ViewMode = 'collection' | 'detail';
+type OwnershipFilter = 'all' | 'owned' | 'missing';
+type SortBy = 'grade' | 'level' | 'attack' | 'name';
+
 type FilterPreset = {
   id: string;
   name: string;
   filterType: 'all' | 'warrior' | 'tactic';
+  ownership: OwnershipFilter;
   filterGrade: Grade | 0;
   filterFaction: Faction | '전체';
-  sortBy: 'grade' | 'level' | 'attack' | 'name';
+  sortBy: SortBy;
 };
+
 const FILTER_PRESET_KEY = 'collection-filter-presets-v1';
 
-// Grade-based effect colors
-const GRADE_EFFECT_COLORS: Record<Grade, { primary: string; glow: string; particle: string }> = {
-  1: { primary: '#ffffff', glow: 'rgba(255,255,255,0.4)', particle: '#e0e0e0' },
-  2: { primary: '#60a5fa', glow: 'rgba(96,165,250,0.4)', particle: '#3b82f6' },
-  3: { primary: '#a78bfa', glow: 'rgba(167,139,250,0.4)', particle: '#8b5cf6' },
-  4: { primary: '#fbbf24', glow: 'rgba(251,191,36,0.5)', particle: '#f59e0b' },
+const SLOT_SIZE_CLASSES = {
+  sm: 'w-24 h-36',
+  md: 'w-40 h-56',
+  lg: 'w-52 h-72',
 };
 
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed * 9999.17) * 10000;
-  return x - Math.floor(x);
+function normalizePreset(raw: Partial<FilterPreset>, index: number): FilterPreset {
+  const filterType = raw.filterType === 'warrior' || raw.filterType === 'tactic' ? raw.filterType : 'all';
+  const ownership = raw.ownership === 'owned' || raw.ownership === 'missing' ? raw.ownership : 'all';
+  const filterGrade = raw.filterGrade === 1 || raw.filterGrade === 2 || raw.filterGrade === 3 || raw.filterGrade === 4 ? raw.filterGrade : 0;
+  const filterFaction = raw.filterFaction === '위' || raw.filterFaction === '촉' || raw.filterFaction === '오' || raw.filterFaction === '군벌' ? raw.filterFaction : '전체';
+  const sortBy = raw.sortBy === 'level' || raw.sortBy === 'attack' || raw.sortBy === 'name' ? raw.sortBy : 'grade';
+  const rawName = typeof raw.name === 'string' ? raw.name.trim() : '';
+
+  return {
+    id: typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : `preset-${Date.now()}-${index}`,
+    name: rawName.length > 0 ? rawName.slice(0, 12) : `프리셋 ${index + 1}`,
+    filterType,
+    ownership,
+    filterGrade,
+    filterFaction,
+    sortBy,
+  };
+}
+
+function LockedCardSlot({ card, size = 'sm' }: { card: Card; size?: 'sm' | 'md' | 'lg' }) {
+  const gradeColor = GRADE_COLORS[card.grade as Grade];
+
+  return (
+    <div
+      className={`relative ${SLOT_SIZE_CLASSES[size]} rounded-lg overflow-hidden border border-slate-600/70 shadow-lg bg-slate-950/90`}
+      style={{ background: `linear-gradient(140deg, #0b0f1a, ${gradeColor}24)` }}
+      aria-label={`${card.name} 미보유`}
+    >
+      <div className="absolute inset-0 opacity-80" style={{ background: 'radial-gradient(circle at 50% 20%, rgba(255,255,255,0.16), transparent 55%)' }} />
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
+      <div className="relative p-1.5 text-center border-b border-slate-600/60 bg-black/25">
+        <div className="text-[11px] font-bold text-slate-100 truncate">{card.name}</div>
+        <div className="flex justify-between items-center text-[9px] text-slate-300/80 px-1">
+          <span>{card.type === 'warrior' ? card.faction : '전법'}</span>
+          <span>{GRADE_LABELS[card.grade as Grade]}</span>
+        </div>
+      </div>
+
+      <div className="relative mx-2 mt-1 aspect-square rounded border border-slate-700/70 bg-black/60 flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-black/80" />
+        <span className="text-4xl text-slate-100/20">{card.type === 'warrior' ? '⚔️' : card.emoji}</span>
+        <div className="absolute inset-0 bg-black/55" />
+        <span className="absolute text-2xl">🔒</span>
+      </div>
+
+      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 text-[9px] rounded-full border border-amber-400/40 bg-amber-900/30 text-amber-100 whitespace-nowrap">
+        미보유
+      </div>
+    </div>
+  );
 }
 
 export default function CardCollection({ ownedCards, onEnhance, onBack }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>('collection');
-  const [selectedCard, setSelectedCard] = useState<OwnedCard | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'warrior' | 'tactic'>('all');
+  const [ownership, setOwnership] = useState<OwnershipFilter>('all');
   const [filterGrade, setFilterGrade] = useState<Grade | 0>(0);
   const [filterFaction, setFilterFaction] = useState<Faction | '전체'>('전체');
-  const [filterType, setFilterType] = useState<'all' | 'warrior' | 'tactic'>('all');
-  const [sortBy, setSortBy] = useState<'grade' | 'level' | 'attack' | 'name'>('grade');
+  const [sortBy, setSortBy] = useState<SortBy>('grade');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const raw = window.localStorage.getItem(FILTER_PRESET_KEY);
       if (!raw) return [];
-      const parsed = JSON.parse(raw) as FilterPreset[];
-      return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+      const parsed = JSON.parse(raw) as Partial<FilterPreset>[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.slice(0, 6).map((preset, index) => normalizePreset(preset, index));
     } catch {
       return [];
     }
   });
-  const [enhanceEffect, setEnhanceEffect] = useState<{ grade: Grade; oldLevel: number; newLevel: number } | null>(null);
-  const [cardFloat, setCardFloat] = useState(false);
 
-  const allCardIds = useMemo(() => {
-    const cards = [...WARRIOR_CARDS, ...TACTIC_CARDS];
-    return new Set(cards.map((c) => c.id));
-  }, []);
+  const ownedCardIds = useMemo(() => new Set(ownedCards.map((card) => card.cardId)), [ownedCards]);
 
-  const ownedCardIds = useMemo(() => new Set(ownedCards.map((c) => c.cardId)), [ownedCards]);
-
-  const collectionRate = Math.round((ownedCardIds.size / allCardIds.size) * 100);
-
-  // Count duplicates per cardId
   const cardIdCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const oc of ownedCards) {
-      counts[oc.cardId] = (counts[oc.cardId] || 0) + 1;
+    for (const owned of ownedCards) {
+      counts[owned.cardId] = (counts[owned.cardId] || 0) + 1;
     }
     return counts;
   }, [ownedCards]);
 
-  // Check if a card can be enhanced
-  const canEnhance = useCallback((oc: OwnedCard): boolean => {
-    const cardData = getCardById(oc.cardId);
+  const ownedByCardId = useMemo(() => {
+    const grouped = new Map<string, OwnedCard[]>();
+    for (const owned of ownedCards) {
+      const bucket = grouped.get(owned.cardId) ?? [];
+      bucket.push(owned);
+      grouped.set(owned.cardId, bucket);
+    }
+
+    for (const bucket of grouped.values()) {
+      bucket.sort((a, b) => b.level - a.level || b.duplicates - a.duplicates || a.instanceId.localeCompare(b.instanceId));
+    }
+
+    return grouped;
+  }, [ownedCards]);
+
+  const collectionRate = Math.round((ownedCardIds.size / ALL_CARDS.length) * 100);
+  const missingCount = ALL_CARDS.length - ownedCardIds.size;
+
+  const canEnhance = useCallback((owned: OwnedCard): boolean => {
+    const cardData = getCardById(owned.cardId);
     if (!cardData) return false;
-    if (oc.level >= MAX_LEVEL[cardData.grade as Grade]) return false;
-    const extraCopies = (cardIdCounts[oc.cardId] || 1) - 1;
-    return oc.duplicates > 0 || extraCopies > 0;
+    if (owned.level >= MAX_LEVEL[cardData.grade as Grade]) return false;
+    const extraCopies = (cardIdCounts[owned.cardId] || 1) - 1;
+    return owned.duplicates > 0 || extraCopies > 0;
+  }, [cardIdCounts]);
+
+  const getEnhanceFuel = useCallback((owned: OwnedCard): number => {
+    const extraCopies = (cardIdCounts[owned.cardId] || 1) - 1;
+    return owned.duplicates + extraCopies;
   }, [cardIdCounts]);
 
   const filteredCards = useMemo(() => {
-    const filtered = ownedCards.filter((oc) => {
-      const card = getCardById(oc.cardId);
-      if (!card) return false;
+    const getOwnedLevel = (cardId: string) => ownedByCardId.get(cardId)?.[0]?.level ?? 0;
+    const getAttack = (card: Card) => {
+      if (card.type !== 'warrior') return -1;
+      const level = getOwnedLevel(card.id);
+      return card.stats.attack + Math.max(0, level - 1);
+    };
+
+    const list = ALL_CARDS.filter((card) => {
       if (filterType !== 'all' && card.type !== filterType) return false;
       if (filterGrade !== 0 && card.grade !== filterGrade) return false;
       if (filterFaction !== '전체' && card.type === 'warrior' && card.faction !== filterFaction) return false;
+
+      const isOwned = ownedCardIds.has(card.id);
+      if (ownership === 'owned' && !isOwned) return false;
+      if (ownership === 'missing' && isOwned) return false;
       return true;
     });
-    return filtered.sort((a, b) => {
-      const ca = getCardById(a.cardId);
-      const cb = getCardById(b.cardId);
-      if (!ca || !cb) return 0;
+
+    list.sort((a, b) => {
+      const ownedA = ownedCardIds.has(a.id) ? 1 : 0;
+      const ownedB = ownedCardIds.has(b.id) ? 1 : 0;
+
       switch (sortBy) {
-        case 'grade': return cb.grade - ca.grade || b.level - a.level;
-        case 'level': return b.level - a.level || cb.grade - ca.grade;
-        case 'attack': {
-          const atkA = ca.type === 'warrior' ? ca.stats.attack + (a.level - 1) : 0;
-          const atkB = cb.type === 'warrior' ? cb.stats.attack + (b.level - 1) : 0;
-          return atkB - atkA;
-        }
-        case 'name': return ca.name.localeCompare(cb.name, 'ko');
-        default: return 0;
+        case 'grade':
+          return b.grade - a.grade || ownedB - ownedA || a.name.localeCompare(b.name, 'ko');
+        case 'level':
+          return getOwnedLevel(b.id) - getOwnedLevel(a.id) || b.grade - a.grade || a.name.localeCompare(b.name, 'ko');
+        case 'attack':
+          return getAttack(b) - getAttack(a) || b.grade - a.grade || a.name.localeCompare(b.name, 'ko');
+        case 'name':
+          return a.name.localeCompare(b.name, 'ko');
+        default:
+          return 0;
       }
     });
-  }, [ownedCards, filterGrade, filterFaction, filterType, sortBy]);
 
-  const handleSelectCard = (owned: OwnedCard) => {
-    SFX.buttonClick();
-    setSelectedCard(owned);
-    setViewMode('detail');
-  };
+    return list;
+  }, [filterType, ownership, filterGrade, filterFaction, sortBy, ownedByCardId, ownedCardIds]);
 
-  const handleEnhance = () => {
-    if (!selectedCard) return;
-    const cardData = getCardById(selectedCard.cardId);
-    if (!cardData) return;
-    const oldLevel = selectedCard.level;
-    const success = onEnhance(selectedCard.instanceId);
-    if (success) {
-      SFX.enhance();
-      // Trigger effect
-      setCardFloat(true);
-      setEnhanceEffect({ grade: cardData.grade as Grade, oldLevel, newLevel: oldLevel + 1 });
-      setTimeout(() => {
-        setCardFloat(false);
-        setEnhanceEffect(null);
-      }, 1500);
-      // Refresh selected card - level up, recalculate
-      setSelectedCard(prev => prev ? { ...prev, level: prev.level + 1 } : prev);
-    }
-  };
+  const selectedCard = useMemo(() => {
+    if (!selectedCardId) return null;
+    return getCardById(selectedCardId) ?? null;
+  }, [selectedCardId]);
 
-  useEffect(() => {
-    localStorage.setItem(FILTER_PRESET_KEY, JSON.stringify(presets));
-  }, [presets]);
+  const selectedOwned = useMemo(() => {
+    if (!selectedCardId) return null;
+    return ownedByCardId.get(selectedCardId)?.[0] ?? null;
+  }, [selectedCardId, ownedByCardId]);
+
+  const selectedFuel = selectedOwned ? getEnhanceFuel(selectedOwned) : 0;
+  const selectedMaxLevel = selectedCard ? MAX_LEVEL[selectedCard.grade as Grade] : 1;
+  const selectedIsMaxLevel = selectedOwned ? selectedOwned.level >= selectedMaxLevel : false;
+  const selectedCanEnhance = selectedOwned ? canEnhance(selectedOwned) : false;
 
   const resetFilters = useCallback(() => {
     setFilterType('all');
+    setOwnership('all');
     setFilterGrade(0);
     setFilterFaction('전체');
     setSortBy('grade');
@@ -154,16 +216,20 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
   const saveCurrentPreset = () => {
     const name = prompt('프리셋 이름을 입력하세요 (최대 12자)');
     if (!name) return;
+
     const trimmed = name.trim().slice(0, 12);
     if (!trimmed) return;
+
     const preset: FilterPreset = {
       id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       name: trimmed,
       filterType,
+      ownership,
       filterGrade,
       filterFaction,
       sortBy,
     };
+
     setPresets((prev) => [preset, ...prev].slice(0, 6));
     SFX.buttonClick();
   };
@@ -171,6 +237,7 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
   const applyPreset = (preset: FilterPreset) => {
     SFX.buttonClick();
     setFilterType(preset.filterType);
+    setOwnership(preset.ownership);
     setFilterGrade(preset.filterGrade);
     setFilterFaction(preset.filterFaction);
     setSortBy(preset.sortBy);
@@ -179,312 +246,36 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
 
   const deletePreset = (presetId: string) => {
     SFX.buttonClick();
-    setPresets((prev) => prev.filter((p) => p.id !== presetId));
+    setPresets((prev) => prev.filter((preset) => preset.id !== presetId));
   };
 
-  // Total available for enhance (stored dupes + extra copies)
-  const getEnhanceFuel = (oc: OwnedCard): number => {
-    const extraCopies = (cardIdCounts[oc.cardId] || 1) - 1;
-    return oc.duplicates + extraCopies;
+  const closeDetail = () => {
+    SFX.buttonClick();
+    setSelectedCardId(null);
   };
 
-  // ─── Detail View ───
-  if (viewMode === 'detail' && selectedCard) {
-    const card = getCardById(selectedCard.cardId);
-    if (!card) return null;
+  const handleSelectCard = (cardId: string) => {
+    if (!ownedCardIds.has(cardId)) return;
+    SFX.buttonClick();
+    setSelectedCardId(cardId);
+  };
 
-    const fuel = getEnhanceFuel(selectedCard);
-    const maxLvl = MAX_LEVEL[card.grade as Grade];
-    const isMaxLevel = selectedCard.level >= maxLvl;
-    const enhanceable = !isMaxLevel && fuel > 0;
-    const effectColors = GRADE_EFFECT_COLORS[card.grade as Grade];
-    const warriorStats = card.type === 'warrior'
-      ? {
-          attack: card.stats.attack + (selectedCard.level - 1),
-          command: card.stats.command + (selectedCard.level - 1),
-          intel: card.stats.intel + (selectedCard.level - 1),
-          defense: card.stats.defense + Math.floor((selectedCard.level - 1) * 0.5),
-        }
-      : null;
+  const handleEnhance = () => {
+    if (!selectedOwned) return;
+    const success = onEnhance(selectedOwned.instanceId);
+    if (success) {
+      SFX.enhance();
+    }
+  };
 
-    return (
-      <div className="min-h-screen bg-gray-900 p-4 relative overflow-hidden">
-        {/* ═══ ENHANCE EFFECT OVERLAY ═══ */}
-        {enhanceEffect && (
-          <>
-            {/* Full screen flash */}
-            <div
-              className="fixed inset-0 z-50 pointer-events-none"
-              style={{
-                animation: 'enhanceFlash 0.8s ease-out forwards',
-                background: `radial-gradient(circle, ${effectColors.glow}, transparent 70%)`,
-              }}
-            />
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTER_PRESET_KEY, JSON.stringify(presets));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [presets]);
 
-            {/* Particles */}
-            <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
-              {Array.from({ length: 20 }).map((_, i) => {
-                const angle = (i / 20) * 360;
-                const dist = 60 + seededRandom(i + 1) * 100;
-                const dx = Math.cos((angle * Math.PI) / 180) * dist;
-                const dy = Math.sin((angle * Math.PI) / 180) * dist;
-                const size = 4 + seededRandom(i + 101) * 6;
-                return (
-                  <div
-                    key={i}
-                    className="absolute rounded-full"
-                    style={{
-                      width: size,
-                      height: size,
-                      background: effectColors.particle,
-                      boxShadow: `0 0 ${size * 2}px ${effectColors.primary}`,
-                      animation: `particleBurst 0.8s ease-out ${i * 0.02}s forwards`,
-                      ['--dx' as string]: `${dx}px`,
-                      ['--dy' as string]: `${dy}px`,
-                    }}
-                  />
-                );
-              })}
-
-              {/* Star particles for legendary */}
-              {enhanceEffect.grade === 4 && Array.from({ length: 8 }).map((_, i) => {
-                const angle = (i / 8) * 360;
-                const dist = 80 + seededRandom(i + 201) * 60;
-                const dx = Math.cos((angle * Math.PI) / 180) * dist;
-                const dy = Math.sin((angle * Math.PI) / 180) * dist;
-                return (
-                  <div
-                    key={`star-${i}`}
-                    className="absolute text-2xl"
-                    style={{
-                      animation: `particleBurst 1s ease-out ${i * 0.05}s forwards`,
-                      ['--dx' as string]: `${dx}px`,
-                      ['--dy' as string]: `${dy}px`,
-                    }}
-                  >
-                    ✨
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* LEVEL UP text */}
-            <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
-              <div style={{ animation: 'levelUpText 1.2s ease-out forwards' }}>
-                <div
-                  className="text-5xl font-black tracking-wider"
-                  style={{
-                    color: effectColors.primary,
-                    textShadow: `0 0 30px ${effectColors.glow}, 0 0 60px ${effectColors.glow}, 0 4px 8px rgba(0,0,0,0.8)`,
-                  }}
-                >
-                  LEVEL UP!
-                </div>
-                <div
-                  className="text-center text-2xl font-bold mt-2"
-                  style={{
-                    color: effectColors.primary,
-                    textShadow: `0 0 20px ${effectColors.glow}`,
-                    animation: 'levelCounter 0.6s ease-out 0.3s forwards',
-                    opacity: 0,
-                  }}
-                >
-                  Lv.{enhanceEffect.oldLevel} → Lv.{enhanceEffect.newLevel}
-                </div>
-              </div>
-            </div>
-
-            {/* Hologram ring for legendary */}
-            {enhanceEffect.grade === 4 && (
-              <div className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center">
-                <div
-                  className="w-48 h-48 rounded-full border-4"
-                  style={{
-                    borderColor: effectColors.primary,
-                    boxShadow: `0 0 40px ${effectColors.glow}, inset 0 0 40px ${effectColors.glow}`,
-                    animation: 'holoRing 1s ease-out forwards',
-                  }}
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        <style jsx>{`
-          @keyframes enhanceFlash {
-            0% { opacity: 0; }
-            15% { opacity: 1; }
-            100% { opacity: 0; }
-          }
-          @keyframes particleBurst {
-            0% { opacity: 1; transform: translate(0, 0) scale(1); }
-            100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0); }
-          }
-          @keyframes levelUpText {
-            0% { opacity: 0; transform: scale(0.3) translateY(20px); }
-            20% { opacity: 1; transform: scale(1.2) translateY(-10px); }
-            40% { transform: scale(1) translateY(0); }
-            75% { opacity: 1; }
-            100% { opacity: 0; transform: scale(1.05) translateY(-30px); }
-          }
-          @keyframes levelCounter {
-            0% { opacity: 0; transform: translateY(10px); }
-            100% { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes cardFloat {
-            0% { transform: translateY(0); filter: brightness(1); }
-            30% { transform: translateY(-15px); filter: brightness(1.3); }
-            100% { transform: translateY(0); filter: brightness(1); }
-          }
-          @keyframes holoRing {
-            0% { opacity: 0; transform: scale(0.3); }
-            30% { opacity: 1; transform: scale(1.1); }
-            70% { opacity: 0.6; transform: scale(1.3); }
-            100% { opacity: 0; transform: scale(1.6); }
-          }
-          @keyframes enhancePulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.4); }
-            50% { box-shadow: 0 0 20px 4px rgba(251,191,36,0.6); }
-          }
-        `}</style>
-
-        <button
-          onClick={() => setViewMode('collection')}
-          className="text-gray-400 text-sm hover:text-white mb-4"
-        >
-          ← 뒤로
-        </button>
-
-        <div className="flex flex-col items-center">
-          {/* Card display with float effect */}
-          <div
-            className="mb-6"
-            style={{ animation: cardFloat ? 'cardFloat 1s ease-out' : 'none' }}
-          >
-            {card.type === 'warrior' ? (
-              <WarriorCardView card={card} owned={selectedCard} size="lg" showDetails />
-            ) : (
-              <TacticCardView card={card as import('@/types/game').TacticCard} owned={selectedCard} size="lg" />
-            )}
-          </div>
-
-          {/* Card info */}
-          <div className="bg-gray-800/50 rounded-xl p-4 w-full max-w-sm">
-            <div className="text-white font-bold text-lg text-center mb-2">{card.name}</div>
-            <div className="text-center text-sm text-gray-400 mb-3">
-              {GRADE_LABELS[card.grade as Grade]} {GRADE_NAMES[card.grade as Grade]}
-              {card.type === 'warrior' && ` | ${card.faction}`}
-            </div>
-
-            {/* Level bar */}
-            <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-              <div className="flex justify-between text-sm text-gray-300">
-                <span>레벨</span>
-                <span className="text-yellow-400">{selectedCard.level} / {maxLvl}</span>
-              </div>
-              <div className="h-2 bg-gray-600 rounded-full mt-1 overflow-hidden">
-                <div
-                  className="h-full bg-yellow-500 transition-all"
-                  style={{ width: `${(selectedCard.level / maxLvl) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Stat effect explanation */}
-            {card.type === 'warrior' && (
-              <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-                <div className="text-xs text-gray-400 mb-2 text-center">현재 레벨 능력치</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-red-400 font-bold">⚔️ 무력 {warriorStats?.attack}</span>
-                    <span className="text-gray-400">→ 공격 데미지</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-green-400 font-bold">🛡️ 통솔 {warriorStats?.command}</span>
-                    <span className="text-gray-400">→ HP (×3)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-blue-400 font-bold">🧠 지력 {warriorStats?.intel}</span>
-                    <span className="text-gray-400">→ 스킬 위력</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-yellow-400 font-bold">🏰 방어 {warriorStats?.defense}</span>
-                    <span className="text-gray-400">→ 피해 감소</span>
-                  </div>
-                </div>
-                <div className="text-[11px] text-center text-gray-300 mt-2">
-                  예상 최대 HP: <span className="font-bold text-green-300">{(warriorStats?.command || 0) * 3}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Enhance fuel info */}
-            <div className="bg-gray-700/50 rounded-lg p-3 mb-3 text-center">
-              <div className="text-xs text-gray-400 mb-1">강화 재료 (중복 카드)</div>
-              <div className="text-lg font-bold" style={{ color: fuel > 0 ? GRADE_COLORS[card.grade as Grade] : '#6b7280' }}>
-                {fuel > 0 ? `${fuel}장 보유` : '없음'}
-              </div>
-            </div>
-
-            {/* ═══ BIG ENHANCE BUTTON ═══ */}
-            <button
-              onClick={handleEnhance}
-              disabled={!enhanceable || !!enhanceEffect}
-              className={`w-full py-4 rounded-xl font-black text-xl transition-all relative overflow-hidden ${
-                enhanceable
-                  ? 'text-white'
-                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-              }`}
-              style={enhanceable ? {
-                background: `linear-gradient(135deg, ${GRADE_COLORS[card.grade as Grade]}, ${effectColors.primary})`,
-                animation: 'enhancePulse 2s infinite',
-              } : undefined}
-            >
-              {enhanceable && (
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
-                    animation: 'shimmer 2s infinite',
-                  }}
-                />
-              )}
-              <span className="relative z-10">
-                {isMaxLevel
-                  ? '⭐ 최대 레벨!'
-                  : enhanceable
-                  ? `⬆️ 강화! (Lv.${selectedCard.level} → ${selectedCard.level + 1})`
-                  : '중복 카드 필요'}
-              </span>
-            </button>
-
-            {/* Skills list */}
-            {card.type === 'warrior' && card.skills.length > 0 && (
-              <div className="mt-4">
-                <div className="text-sm text-gray-400 mb-2">스킬</div>
-                {card.skills.map((s) => (
-                  <div key={s.name} className="bg-gray-700/50 rounded-lg p-2 mb-1">
-                    <div className="text-sm text-white">
-                      <span className={
-                        s.type === 'ultimate' ? 'text-yellow-400' :
-                        s.type === 'passive' ? 'text-blue-400' : 'text-green-400'
-                      }>
-                        [{s.type === 'ultimate' ? '궁극' : s.type === 'passive' ? '패시브' : '액티브'}]
-                      </span>{' '}
-                      {s.name}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5">{s.description}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Collection Grid ───
   return (
     <div className="min-h-screen ui-page p-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
       <style jsx>{`
@@ -492,24 +283,18 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
           0%, 100% { transform: scale(1); opacity: 0.9; }
           50% { transform: scale(1.2); opacity: 1; }
         }
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
       `}</style>
 
-      {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <button onClick={onBack} className="text-gray-300 text-sm hover:text-white min-h-10 px-2">← 뒤로</button>
-        <h1 className="text-white font-bold">카드 수집</h1>
+        <h1 className="text-white font-bold">카드 도감</h1>
         <div className="text-sm text-yellow-400">{collectionRate}%</div>
       </div>
 
-      {/* Collection progress */}
-      <div className="ui-panel rounded-lg p-3 mb-4">
+      <div className="ui-panel rounded-lg p-3 mb-3">
         <div className="flex justify-between text-xs text-gray-400 mb-1">
           <span>수집 진행도</span>
-          <span>{ownedCardIds.size}/{allCardIds.size}</span>
+          <span>{ownedCardIds.size}/{ALL_CARDS.length}</span>
         </div>
         <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
           <div
@@ -517,9 +302,16 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
             style={{ width: `${collectionRate}%` }}
           />
         </div>
+        <div className="mt-2 flex justify-between text-[11px] text-gray-300">
+          <span>보유 {ownedCardIds.size}종</span>
+          <span>미보유 {missingCount}종</span>
+        </div>
       </div>
 
-      {/* Filters */}
+      <div className="ui-panel rounded-lg p-3 mb-4 text-[11px] text-gray-300">
+        미보유 카드는 실루엣으로 표시됩니다. 보유 카드만 눌러 상세/강화를 진행할 수 있습니다.
+      </div>
+
       <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
         <button
           onClick={() => setFilterType('all')}
@@ -535,14 +327,29 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
         >전법</button>
       </div>
 
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        <button
+          onClick={() => setOwnership('all')}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${ownership === 'all' ? 'bg-slate-200 text-black' : 'bg-gray-700 text-gray-200'}`}
+        >전체 상태</button>
+        <button
+          onClick={() => setOwnership('owned')}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${ownership === 'owned' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200'}`}
+        >보유</button>
+        <button
+          onClick={() => setOwnership('missing')}
+          className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${ownership === 'missing' ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-200'}`}
+        >미보유</button>
+      </div>
+
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        {([0, 1, 2, 3, 4] as const).map((g) => (
+        {([0, 1, 2, 3, 4] as const).map((grade) => (
           <button
-            key={g}
-            onClick={() => setFilterGrade(g)}
-            className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterGrade === g ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-200'}`}
+            key={grade}
+            onClick={() => setFilterGrade(grade)}
+            className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterGrade === grade ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-200'}`}
           >
-            {g === 0 ? '등급' : GRADE_LABELS[g]}
+            {grade === 0 ? '등급' : GRADE_LABELS[grade]}
           </button>
         ))}
       </div>
@@ -595,12 +402,12 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
         <div className="ui-panel rounded-xl p-3 mb-4 space-y-3">
           {filterType !== 'tactic' && (
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {(['전체', '위', '촉', '오', '군벌'] as const).map((f) => (
+              {(['전체', '위', '촉', '오', '군벌'] as const).map((faction) => (
                 <button
-                  key={f}
-                  onClick={() => setFilterFaction(f)}
-                  className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterFaction === f ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200'}`}
-                >{f}</button>
+                  key={faction}
+                  onClick={() => setFilterFaction(faction)}
+                  className={`px-3 py-2 rounded-full text-xs whitespace-nowrap min-h-9 ${filterFaction === faction ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200'}`}
+                >{faction}</button>
               ))}
             </div>
           )}
@@ -618,17 +425,15 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
         </div>
       )}
 
-      {/* Card grid with enhance badges */}
       <div className="flex flex-wrap gap-2 justify-center">
-        {filteredCards.map((oc) => {
-          const card = getCardById(oc.cardId);
-          if (!card) return null;
-          const isEnhanceable = canEnhance(oc);
-          const dupCount = (cardIdCounts[oc.cardId] || 1) - 1;
+        {filteredCards.map((card) => {
+          const owned = ownedByCardId.get(card.id)?.[0] ?? null;
+          const isOwned = !!owned;
+          const isEnhanceable = owned ? canEnhance(owned) : false;
+          const duplicateCount = Math.max((cardIdCounts[card.id] || 0) - 1, 0);
 
           return (
-            <div key={oc.instanceId} className="relative">
-              {/* Enhanceable badge */}
+            <div key={card.id} className="relative">
               {isEnhanceable && (
                 <div
                   className="absolute -top-1 -right-1 z-10 w-6 h-6 rounded-full flex items-center justify-center text-xs"
@@ -641,23 +446,27 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
                   ⬆️
                 </div>
               )}
-              {card.type === 'warrior' ? (
-                <WarriorCardView
-                  card={card}
-                  owned={oc}
-                  size="sm"
-                  onClick={() => handleSelectCard(oc)}
-                  showDetails
-                  duplicateCount={dupCount}
-                />
+
+              {isOwned ? (
+                card.type === 'warrior' ? (
+                  <WarriorCardView
+                    card={card}
+                    owned={owned}
+                    size="sm"
+                    onClick={() => handleSelectCard(card.id)}
+                    duplicateCount={duplicateCount}
+                  />
+                ) : (
+                  <TacticCardView
+                    card={card}
+                    owned={owned}
+                    size="sm"
+                    onClick={() => handleSelectCard(card.id)}
+                    duplicateCount={duplicateCount}
+                  />
+                )
               ) : (
-                <TacticCardView
-                  card={card as import('@/types/game').TacticCard}
-                  owned={oc}
-                  size="sm"
-                  onClick={() => handleSelectCard(oc)}
-                  duplicateCount={dupCount}
-                />
+                <LockedCardSlot card={card} size="sm" />
               )}
             </div>
           );
@@ -690,6 +499,30 @@ export default function CardCollection({ ownedCards, onEnhance, onBack }: Props)
           </div>
         </div>
       )}
+
+      <CardDetailModal
+        card={selectedCard}
+        owned={selectedOwned}
+        ownedCount={selectedCard ? cardIdCounts[selectedCard.id] || 0 : 0}
+        sourceTag="컬렉션"
+        onClose={closeDetail}
+        secondaryAction={selectedCard ? { label: '닫기', onClick: closeDetail, tone: 'neutral' } : undefined}
+        primaryAction={selectedCard && selectedOwned ? {
+          label: selectedIsMaxLevel
+            ? '최대 레벨'
+            : selectedCanEnhance
+            ? `강화 (Lv.${selectedOwned.level} → Lv.${selectedOwned.level + 1})`
+            : '중복 카드 필요',
+          onClick: handleEnhance,
+          disabled: !selectedCanEnhance,
+          tone: selectedCanEnhance ? 'accent' : 'neutral',
+          hint: selectedIsMaxLevel
+            ? '최대 레벨에 도달했습니다.'
+            : selectedCanEnhance
+            ? `강화 재료 ${selectedFuel}장 보유`
+            : '같은 카드를 더 모으면 강화할 수 있습니다.',
+        } : undefined}
+      />
     </div>
   );
 }

@@ -120,15 +120,15 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
         }
 
         return (
-          <div className={`grid grid-cols-4 px-1 text-center text-white bg-black/20 rounded mx-1.5 ${size === 'lg' ? 'mt-2 gap-1.5 py-1' : 'mt-1 gap-0.5 py-0.5'}`}>
-            {stats.map(({ key, label, labelLong, color, bonus }) => {
+          <div className="grid grid-cols-4 px-1 text-center text-white bg-black/20 rounded mx-1.5 mt-1 gap-0.5 py-0.5">
+            {stats.map(({ key, label, color, bonus }) => {
               const value = card.stats[key] + bonus;
               return (
                 <div key={key}>
-                  <div className={`${size === 'lg' ? 'text-[10px]' : 'text-[9px]'} text-${color}-400/70 leading-tight`}>
-                    {size === 'lg' ? labelLong : label}
+                  <div className={`text-[9px] text-${color}-400/70 leading-tight`}>
+                    {label}
                   </div>
-                  <div className={`font-bold ${size === 'lg' ? 'text-xl' : 'text-sm'} text-${color}-400`}>
+                  <div className={`font-bold text-sm text-${color}-400`}>
                     {value}
                     {bonus > 0 && <span className={`text-[9px] text-${color}-300/60 ml-0.5`}>+{bonus}</span>}
                   </div>

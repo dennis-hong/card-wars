@@ -89,6 +89,7 @@ export default function Home() {
         onOpen={openBooster}
         onComplete={() => setScreen('main')}
         ownedCardIds={ownedCardIds}
+        ownedCards={state.ownedCards}
       />
     );
   }
