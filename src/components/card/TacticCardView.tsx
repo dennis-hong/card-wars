@@ -1,6 +1,7 @@
 'use client';
 
 import { TacticCard, GRADE_COLORS, OwnedCard } from '@/types/game';
+import { getTacticEffectLines } from '@/data/cards';
 
 interface Props {
   card: TacticCard;
@@ -20,6 +21,9 @@ const SIZE_CLASSES = {
 
 export default function TacticCardView({ card, owned, size = 'md', onClick, selected, disabled, duplicateCount }: Props) {
   const gradeColor = GRADE_COLORS[card.grade];
+  const tacticLevel = Math.max(1, owned?.level ?? 1);
+  const effectLines = getTacticEffectLines(card, tacticLevel);
+  const previewLines = size === 'sm' ? effectLines.slice(0, 1) : effectLines.slice(0, 2);
 
   return (
     <div
@@ -57,6 +61,15 @@ export default function TacticCardView({ card, owned, size = 'md', onClick, sele
       {/* Description */}
       <div className={`px-2 mt-1.5 text-center text-gray-300 leading-tight line-clamp-2 ${size === 'lg' ? 'text-sm' : size === 'md' ? 'text-xs' : 'text-[9px]'}`}>
         {card.description}
+      </div>
+
+      {/* Numeric effect summary */}
+      <div className={`px-2 mt-1 text-center ${size === 'sm' ? 'text-[7px]' : 'text-[10px]'} text-emerald-200`}>
+        {previewLines.map((line, i) => (
+          <div key={`${card.id}-${i}`} className="truncate">
+            {line}
+          </div>
+        ))}
       </div>
 
       {/* Base stat */}

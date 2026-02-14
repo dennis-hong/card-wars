@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, Grade, MAX_LEVEL, OwnedCard, GRADE_COLORS, GRADE_LABELS, GRADE_NAMES, FACTION_COLORS } from '@/types/game';
+import { getTacticEffectLines } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
 
@@ -136,6 +137,7 @@ export default function CardDetailModal({
   const damageSamples = warriorStats
     ? [2, 5, 8].map((defense) => ({ defense, damage: Math.max(1, warriorStats.attack - defense) }))
     : [];
+  const tacticEffectLines = card.type === 'tactic' ? getTacticEffectLines(card, level) : [];
 
   const tacticTags = card.type === 'tactic' ? getTacticRole(card.description) : [];
 
@@ -252,7 +254,14 @@ export default function CardDetailModal({
             <>
               <div className="mb-4 rounded-xl border border-white/10 bg-slate-900/70 p-4">
                 <div className="mb-2 text-sm font-bold text-slate-200">전법 효과</div>
-                <div className="rounded-lg bg-black/25 p-3 text-sm text-slate-100">{card.description}</div>
+                <div className="rounded-lg bg-black/25 p-3">
+                  <div className="text-sm text-slate-100">{card.description}</div>
+                  <div className="mt-2 space-y-1 text-xs text-emerald-200">
+                    {tacticEffectLines.map((line, index) => (
+                      <div key={`${card.id}-detail-${index}`}>• {line}</div>
+                    ))}
+                  </div>
+                </div>
                 <div className="mt-2 text-xs text-slate-300">
                   기반 능력치: {card.baseStat === 'none' ? '능력치 무관' : card.baseStat}
                 </div>

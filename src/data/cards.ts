@@ -316,6 +316,46 @@ export const TACTIC_CARDS: TacticCard[] = [
   },
 ];
 
+export function getTacticEffectLines(card: TacticCard, level = 1): string[] {
+  const tacticLevel = Math.max(1, Math.floor(level));
+  const turnsBy5 = 1 + Math.floor((tacticLevel - 1) / 5);
+  const turnsBy6 = 1 + Math.floor((tacticLevel - 1) / 6);
+
+  switch (card.id) {
+    case 't-fire': {
+      const dmg = 4 + (tacticLevel - 1);
+      return [`기본 피해: ${dmg} (적 전체)`];
+    }
+    case 't-ambush': {
+      return [`회피 부여: ${turnsBy5}턴`, '야습/매복 강화 시 아군 전체'];
+    }
+    case 't-chain': {
+      return [`행동불가: ${turnsBy6}턴`, '대상: 적 전위 1체'];
+    }
+    case 't-taunt': {
+      return [`공격 집중: ${turnsBy6}턴`, '대상: 적 공격 전위 집중'];
+    }
+    case 't-heal': {
+      const heal = 5 + (tacticLevel - 1);
+      return [`회복: +${heal}`, '대상: 아군 최저 HP 1체'];
+    }
+    case 't-buff': {
+      const buff = 3 + (tacticLevel - 1);
+      return [`무력 버프: +${buff} (${turnsBy6}턴)`, '대상: 아군 전위 1체'];
+    }
+    case 't-rockfall': {
+      const raw = 8 + (tacticLevel - 1);
+      return [`공격력: ${raw}`, '적 1체 단독 타격, 최종 데미지는 방어 반영'];
+    }
+    case 't-counter': {
+      const reflected = 3 + (tacticLevel - 1);
+      return ['적 전법 1회 반사', `반사 피해: ${reflected}`];
+    }
+    default:
+      return [card.description];
+  }
+}
+
 // ============================================================
 // All cards combined
 // ============================================================
