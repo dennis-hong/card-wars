@@ -7,7 +7,7 @@ import { TITLES } from '@/data/titles';
 import { generateId } from '@/lib/uuid';
 import { openPack } from '@/lib/gacha';
 import { createInitialState, loadState, saveState } from '@/lib/storage';
-import { sanitizeDeck, canLevelUp } from '@/lib/card-utils';
+import { canLevelUp, normalizeDeckComposition, validateDeck } from '@/lib/card-utils';
 
 // Remove stale deck references when a card is removed from ownedCards
 function cleanDecksAfterRemoval(decks: Deck[], removedInstanceId: string): Deck[] {
@@ -126,14 +126,18 @@ export function useGameState() {
 
   const saveDeck = useCallback((deck: Deck) => {
     updateState((prev) => {
-      const existing = prev.decks.findIndex((d) => d.id === deck.id);
+      const normalized = normalizeDeckComposition(deck, prev.ownedCards);
+      const result = validateDeck(normalized, prev.ownedCards);
+      if (!result.valid) return prev;
+
+      const existing = prev.decks.findIndex((d) => d.id === normalized.id);
       const decks = [...prev.decks];
       if (existing >= 0) {
-        decks[existing] = deck;
+        decks[existing] = normalized;
       } else {
-        decks.push(deck);
+        decks.push(normalized);
       }
-      return { ...prev, decks, activeDeckId: deck.id };
+      return { ...prev, decks, activeDeckId: normalized.id };
     });
   }, [updateState]);
 
@@ -206,16 +210,18 @@ export function useGameState() {
   }, [updateState]);
 
   const recordBattleResult = useCallback((win: boolean) => {
+    let nextStreak = 0;
+
     updateState((prev) => {
-      const newStreak = win ? prev.stats.streak + 1 : 0;
-      const newMaxStreak = Math.max(prev.stats.maxStreak, newStreak);
+      nextStreak = win ? prev.stats.streak + 1 : 0;
+      const newMaxStreak = Math.max(prev.stats.maxStreak, nextStreak);
       return {
         ...prev,
         stats: {
           ...prev.stats,
           wins: prev.stats.wins + (win ? 1 : 0),
           losses: prev.stats.losses + (win ? 0 : 1),
-          streak: newStreak,
+          streak: nextStreak,
           maxStreak: newMaxStreak,
         },
       };
@@ -223,16 +229,24 @@ export function useGameState() {
     // Award packs based on win/streak
     if (win) {
       addBoosterPack('normal');
-      // Check streak-based rewards (use current state + 1 for new streak)
-      const newStreak = state.stats.streak + 1;
-      if (newStreak === 3) {
+      if (nextStreak === 3) {
         addBoosterPack('rare');
       }
-      if (newStreak === 5) {
+      if (nextStreak === 5) {
         addBoosterPack('hero');
       }
     }
-  }, [updateState, addBoosterPack, state.stats.streak]);
+  }, [addBoosterPack, updateState]);
+
+  const recordScenarioClear = useCallback(() => {
+    updateState((prev) => ({
+      ...prev,
+      stats: {
+        ...prev.stats,
+        scenariosCleared: prev.stats.scenariosCleared + 1,
+      },
+    }));
+  }, [updateState]);
 
   const resetGame = useCallback(() => {
     const fresh = createInitialState();
@@ -271,6 +285,7 @@ export function useGameState() {
     enhanceCard,
     mergeCards,
     recordBattleResult,
+    recordScenarioClear,
     resetGame,
     newTitleIds,
     dismissNewTitles,

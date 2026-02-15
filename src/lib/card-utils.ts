@@ -259,6 +259,54 @@ export function sanitizeDeck(deck: Deck, ownedCards: readonly OwnedCard[]): Deck
   };
 }
 
+export function normalizeDeckComposition(
+  deck: Deck,
+  ownedCards: readonly OwnedCard[],
+): Deck {
+  const ownedIds = new Set(ownedCards.map((card) => card.instanceId));
+
+  const normalizedWarriors: DeckSlot[] = [];
+  const usedWarriors = new Set<string>();
+  const usedLanes = new Set<DeckSlot['lane']>();
+
+  for (const slot of deck.warriors) {
+    if (!ownedIds.has(slot.instanceId)) continue;
+    if (usedWarriors.has(slot.instanceId)) continue;
+
+    const owned = ownedCards.find((ownedCard) => ownedCard.instanceId === slot.instanceId);
+    if (!owned) continue;
+    const card = getCardById(owned.cardId);
+    if (!card || card.type !== 'warrior') continue;
+
+    if (usedLanes.has(slot.lane)) continue;
+    usedLanes.add(slot.lane);
+    usedWarriors.add(slot.instanceId);
+    normalizedWarriors.push({ instanceId: slot.instanceId, lane: slot.lane });
+  }
+
+  const normalizedTactics: string[] = [];
+  const usedTactics = new Set<string>();
+  for (const tacticId of deck.tactics) {
+    if (!ownedIds.has(tacticId)) continue;
+    if (usedTactics.has(tacticId)) continue;
+
+    const owned = ownedCards.find((ownedCard) => ownedCard.instanceId === tacticId);
+    if (!owned) continue;
+    const card = getCardById(owned.cardId);
+    if (!card || card.type !== 'tactic') continue;
+
+    usedTactics.add(tacticId);
+    normalizedTactics.push(tacticId);
+  }
+
+  return {
+    ...deck,
+    name: deck.name.trim() || '원정대',
+    warriors: normalizedWarriors.slice(0, 3),
+    tactics: normalizedTactics.slice(0, 2),
+  };
+}
+
 /** Resolve an owned card to its typed warrior data, or null */
 export function resolveWarrior(owned: OwnedCard): { owned: OwnedCard; card: WarriorCard } | null {
   const resolved = resolveOwnedCard(owned);

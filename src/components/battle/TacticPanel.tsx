@@ -2,17 +2,9 @@
 
 import { CSSProperties, useMemo } from 'react';
 import Image from 'next/image';
-import { BattleState, BattleWarrior, Deck } from '@/types/game';
+import { BattleState, Deck } from '@/types/game';
 import { getTacticById } from '@/data/cards';
 import { TACTIC_IMAGES } from '@/lib/tactic-images';
-import { getLaneLabel } from '@/lib/battle/preview-utils';
-
-export interface TargetForecastRow {
-  attackerSide: 'player' | 'enemy';
-  lane: 'front' | 'mid' | 'back';
-  attackerName: string;
-  targetName: string;
-}
 
 export interface TacticPreview {
   title: string;
@@ -27,10 +19,7 @@ interface Props {
   deck: Deck;
   animating: boolean;
   tacticAnimState: Record<number, AnimState>;
-  selectedTacticSide: 'player' | 'enemy';
-  targetForecast: TargetForecastRow[];
   tacticPreview: TacticPreview | null;
-  onSideChange: (side: 'player' | 'enemy') => void;
   onSelectTactic: (index: number) => void;
   onConfirmTactic: () => Promise<void>;
 }
@@ -54,10 +43,7 @@ export default function TacticPanel({
   deck,
   animating,
   tacticAnimState,
-  selectedTacticSide,
-  targetForecast,
   tacticPreview,
-  onSideChange,
   onSelectTactic,
   onConfirmTactic,
 }: Props) {
@@ -75,49 +61,6 @@ export default function TacticPanel({
       {hasAvailableTactics && battle.player.tactics.length > deck.tactics.length && (
         <div className="text-center text-[10px] text-green-300/80 mb-2 flex items-center justify-center gap-1">
           <span>📜</span> 손권 용병술: 전법 카드 +1장 추가!
-        </div>
-      )}
-
-      {targetForecast.length > 0 && (
-        <div className="mb-3 rounded-xl border border-cyan-500/30 bg-cyan-900/20 p-2">
-          <div className="text-[11px] font-bold text-cyan-200 mb-1">🎯 현재 상태 기준 타겟 예측</div>
-          <div className="flex gap-1 mb-1.5">
-            <button
-              onClick={() => onSideChange('player')}
-              className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                selectedTacticSide === 'player'
-                  ? 'border-cyan-300 bg-cyan-700/40 text-cyan-100'
-                  : 'border-cyan-700/50 bg-cyan-900/20 text-cyan-300/70'
-              }`}
-            >
-              아군 공격
-            </button>
-            <button
-              onClick={() => onSideChange('enemy')}
-              className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                selectedTacticSide === 'enemy'
-                  ? 'border-cyan-300 bg-cyan-700/40 text-cyan-100'
-                  : 'border-cyan-700/50 bg-cyan-900/20 text-cyan-300/70'
-              }`}
-            >
-              적군 공격
-            </button>
-          </div>
-          <div className="space-y-1">
-            {targetForecast
-              .filter((row) => row.attackerSide === selectedTacticSide)
-              .map((row, i) => (
-                <div
-                  key={`${row.attackerSide}-${row.lane}-${i}`}
-                  className="text-[10px] text-cyan-100/90 flex items-center justify-between gap-2"
-                >
-                  <span>
-                    {row.attackerSide === 'player' ? '아군' : '적군'} {row.lane === 'front' ? '전위' : row.lane === 'mid' ? '중위' : '후위'}
-                  </span>
-                  <span className="truncate max-w-[70%] text-right">{row.targetName}</span>
-                </div>
-              ))}
-            </div>
         </div>
       )}
 

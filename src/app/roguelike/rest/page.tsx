@@ -5,11 +5,6 @@ import { getCardById } from '@/data/cards';
 import { useRunContext } from '@/context/run-context';
 import RunHeader from '@/components/roguelike/RunHeader';
 
-function formatHp(hp: number, max: number) {
-  const percent = Math.max(0, Math.min(100, Math.round((hp / max) * 100)));
-  return `${hp}/${max} (${percent}%)`;
-}
-
 export default function RoguelikeRestPage() {
   const {
     state,
@@ -32,8 +27,6 @@ export default function RoguelikeRestPage() {
       });
   }, [state.deck.warriors, state.inventory]);
 
-  const canHeal = state.teamHp < state.maxTeamHp;
-
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <RunHeader />
@@ -42,7 +35,6 @@ export default function RoguelikeRestPage() {
         <div className="rounded-2xl border border-white/15 bg-black/35 p-4">
           <div className="text-sm text-gray-300">휴식지</div>
           <div className="text-xl font-bold">진지 보급</div>
-          <div className="mt-2 text-sm text-gray-200">현재 체력 {formatHp(state.teamHp, state.maxTeamHp)}</div>
         </div>
 
         <button
@@ -50,12 +42,9 @@ export default function RoguelikeRestPage() {
             healByRest();
             goToMap();
           }}
-          disabled={!canHeal}
-          className={`w-full py-4 rounded-xl font-bold ${
-            canHeal ? 'ui-btn ui-btn-primary' : 'bg-gray-700 text-gray-300'
-          }`}
+          className="ui-btn ui-btn-primary w-full py-4"
         >
-          휴식으로 체력 회복
+          휴식하기
         </button>
 
         <div className="rounded-2xl border border-white/15 bg-black/35 p-4 space-y-3">

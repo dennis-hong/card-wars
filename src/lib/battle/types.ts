@@ -14,8 +14,6 @@ export interface BattleEngineOptions {
   };
   playerRelics?: string[];
   enemyRelics?: string[];
-  teamHp?: number;
-  maxTeamHp?: number;
   runRelics?: {
     player: string[];
     enemy: string[];

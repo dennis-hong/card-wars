@@ -122,8 +122,6 @@ export interface RunState {
   phase: RunPhase;
   deck: Deck;
   relics: string[];
-  teamHp: number;
-  maxTeamHp: number;
   gold: number;
   inventory: OwnedCard[];
   map: RoguelikeMap | null;

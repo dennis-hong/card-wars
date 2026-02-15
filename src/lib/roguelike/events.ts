@@ -1,5 +1,7 @@
 import { RunEventChoice, RunEventDefinition } from '@/lib/roguelike/run-types';
 
+import { DeterministicRandom } from '@/lib/rng';
+
 export const ROGUELIKE_EVENTS: RunEventDefinition[] = [
   {
     id: 'brotherhood',
@@ -179,8 +181,11 @@ const EVENT_BY_ID = new Map<string, RunEventDefinition>(
   ROGUELIKE_EVENTS.map((event) => [event.id, event]),
 );
 
-export function pickRandomEvent(): RunEventDefinition {
-  return ROGUELIKE_EVENTS[Math.floor(Math.random() * ROGUELIKE_EVENTS.length)];
+const DEFAULT_RANDOM: DeterministicRandom = { next: Math.random };
+
+export function pickRandomEvent(random: DeterministicRandom = DEFAULT_RANDOM): RunEventDefinition {
+  const index = Math.floor(random.next() * ROGUELIKE_EVENTS.length);
+  return ROGUELIKE_EVENTS[index];
 }
 
 export function getEventById(id: string): RunEventDefinition | null {

@@ -17,6 +17,8 @@ export function hasStatus(warrior: BattleWarrior, type: BattleWarrior['statusEff
   return warrior.statusEffects.some((e) => e.type === type && e.turnsLeft > 0);
 }
 
+const MAX_STALEMATE_TURNS = 8;
+
 export function getStatusValue(warrior: BattleWarrior, type: BattleWarrior['statusEffects'][number]['type']): number {
   const effect = warrior.statusEffects.find((e) => e.type === type && e.turnsLeft > 0);
   return effect ? effect.value : 0;
@@ -24,6 +26,10 @@ export function getStatusValue(warrior: BattleWarrior, type: BattleWarrior['stat
 
 export function hasAliveWarrior(warriors: BattleWarrior[]): boolean {
   return warriors.some((w) => w.isAlive);
+}
+
+function getTotalHp(warriors: BattleWarrior[]): number {
+  return warriors.reduce((sum, warrior) => sum + Math.max(0, warrior.currentHp), 0);
 }
 
 export function getAliveByLane(warriors: BattleWarrior[], lane: Lane): BattleWarrior | undefined {
@@ -354,6 +360,8 @@ export function resolveCombat(
   const playerAlive = newState.player.warriors.filter((w) => w.isAlive).length;
   const enemyAlive = newState.enemy.warriors.filter((w) => w.isAlive).length;
   const turnEndLog: string[] = [];
+  const playerHpBefore = getTotalHp(newState.player.warriors);
+  const enemyHpBefore = getTotalHp(newState.enemy.warriors);
 
   if (enemyAlive === 0) {
     newState.result = 'win';
@@ -369,36 +377,58 @@ export function resolveCombat(
     newState.log.push(msg);
     turnEndLog.push(msg);
     actions.push({ type: 'turn_end', newTurn: newState.turn, phase: 'result', result: 'lose', log: turnEndLog });
-  } else if (newState.turn >= newState.maxTurns) {
-    const playerHp = newState.player.warriors.reduce((sum, w) => sum + w.currentHp, 0);
-    const enemyHp = newState.enemy.warriors.reduce((sum, w) => sum + w.currentHp, 0);
-    if (playerHp > enemyHp) {
-      newState.result = 'win';
-      const msg = `🎉 승리! HP 합산 ${playerHp} vs ${enemyHp}`;
-      newState.log.push(msg);
-      turnEndLog.push(msg);
-    } else if (playerHp < enemyHp) {
-      newState.result = 'lose';
-      const msg = `💀 패배... HP 합산 ${playerHp} vs ${enemyHp}`;
-      newState.log.push(msg);
-      turnEndLog.push(msg);
-    } else {
-      newState.result = 'draw';
-      const msg = `🤝 무승부! HP 합산 ${playerHp} vs ${enemyHp}`;
-      newState.log.push(msg);
-      turnEndLog.push(msg);
-    }
-    newState.phase = 'result';
-    actions.push({ type: 'turn_end', newTurn: newState.turn, phase: 'result', result: newState.result, log: turnEndLog });
   } else {
-    newState.turn += 1;
-    newState.phase = 'tactic';
-    newState.player.selectedTactic = null;
-    newState.enemy.selectedTactic = null;
-    const msg = `\n──── 턴 ${newState.turn} ────`;
-    newState.log.push(msg);
-    turnEndLog.push(msg);
-    actions.push({ type: 'turn_end', newTurn: newState.turn, phase: 'tactic', result: null, log: turnEndLog });
+    const playerHpAfter = getTotalHp(newState.player.warriors);
+    const enemyHpAfter = getTotalHp(newState.enemy.warriors);
+    const hadDamage = playerHpAfter < playerHpBefore || enemyHpAfter < enemyHpBefore;
+    newState.stalemateTurns = hadDamage ? 0 : newState.stalemateTurns + 1;
+
+    if (newState.stalemateTurns >= MAX_STALEMATE_TURNS) {
+      newState.result = 'draw';
+      const msg = `🤝 교착! ${MAX_STALEMATE_TURNS}턴 무피해로 무승부`;
+      newState.log.push(msg);
+      turnEndLog.push(msg);
+    } else if (newState.turn >= newState.maxTurns) {
+      newState.result = 'draw';
+      const playerHp = getTotalHp(newState.player.warriors);
+      const enemyHp = getTotalHp(newState.enemy.warriors);
+      const msg = `⏱️ ${newState.maxTurns}턴 제한으로 무승부`;
+      newState.log.push(msg);
+      turnEndLog.push(msg);
+      if (playerHp > enemyHp) {
+        turnEndLog.push(`(참고) 아군 HP ${playerHp} > 적군 HP ${enemyHp}`);
+      } else if (enemyHp > playerHp) {
+        turnEndLog.push(`(참고) 적군 HP ${enemyHp} > 아군 HP ${playerHp}`);
+      } else {
+        turnEndLog.push(`(참고) HP 동률 ${playerHp}`);
+      }
+    }
+
+    if (newState.result) {
+      newState.phase = 'result';
+      actions.push({
+        type: 'turn_end',
+        newTurn: newState.turn,
+        phase: 'result',
+        result: newState.result,
+        log: turnEndLog,
+      });
+    } else {
+      newState.turn += 1;
+      newState.phase = 'tactic';
+      newState.player.selectedTactic = null;
+      newState.enemy.selectedTactic = null;
+      const msg = `\n──── 턴 ${newState.turn} ────`;
+      newState.log.push(msg);
+      turnEndLog.push(msg);
+      actions.push({
+        type: 'turn_end',
+        newTurn: newState.turn,
+        phase: 'tactic',
+        result: null,
+        log: turnEndLog,
+      });
+    }
   }
 
   newState.combatEvents = allEvents;

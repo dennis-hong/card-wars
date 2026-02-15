@@ -40,33 +40,42 @@ const NODE_LABELS: Record<string, string> = {
   boss: '보스',
 };
 
+const FALLBACK_MAP: NonNullable<RunState['map']> = {
+  act: 1,
+  columns: 0,
+  nodes: [],
+  edges: [],
+  startNodeId: '',
+  bossNodeId: '',
+};
+
 function nodeImage(type: string) {
   return `/images/map/node-${type}.png`;
 }
 
 function nodeRingClass(type: string) {
-  if (type === 'boss') return 'border-amber-300/90';
-  if (type === 'elite') return 'border-purple-400/90';
-  if (type === 'event') return 'border-emerald-400/80';
-  if (type === 'shop') return 'border-amber-300/75';
-  if (type === 'rest') return 'border-pink-300/80';
-  return 'border-blue-400/80';
+  if (type === 'boss') return 'border-amber-300';
+  if (type === 'elite') return 'border-purple-400';
+  if (type === 'event') return 'border-emerald-400';
+  if (type === 'shop') return 'border-amber-300';
+  if (type === 'rest') return 'border-pink-300';
+  return 'border-blue-400';
 }
 
-function getCurrentFloorIndex(typeMap: RunState['map'], currentNodeId: RunState['currentNodeId']) {
-  if (!typeMap || !currentNodeId) return null;
+function getCurrentFloorIndex(
+  typeMap: NonNullable<RunState['map']>,
+  currentNodeId: RunState['currentNodeId']
+) {
+  if (!currentNodeId) return null;
   const node = typeMap.nodes.find((item) => item.id === currentNodeId);
   return node ? node.column : null;
 }
 
 export default function RunMap({ state, selectableNodes, onSelect }: Props) {
-  if (!state.map) {
-    return <div className="text-gray-300">맵 데이터가 없습니다.</div>;
-  }
-
-  const map = state.map;
   const mapRef = useRef<HTMLDivElement>(null);
   const [contentWidth, setContentWidth] = useState(DEFAULT_WIDTH);
+  const hasMap = Boolean(state.map);
+  const map = state.map ?? FALLBACK_MAP;
 
   const visited = new Set(state.visitedNodes);
   const currentFloorIndex = useMemo(
@@ -162,8 +171,12 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
     }
     const currentY = TOP_PADDING + (map.columns - 1 - currentFloorIndex) * FLOOR_SPACING;
     const target = Math.max(0, currentY - 240);
-    mapRef.current.scrollTo({ top: target, behavior: 'smooth' });
+      mapRef.current.scrollTo({ top: target, behavior: 'smooth' });
   }, [currentFloorIndex, map.columns]);
+
+  if (!hasMap) {
+    return <div className="text-gray-300">맵 데이터가 없습니다.</div>;
+  }
 
   return (
     <div
@@ -205,7 +218,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
           return (
             <div key={`floor-${floorIndex}`}>
               <div
-                className={`pointer-events-none absolute left-2 top-0 -translate-y-1/2 text-[11px] ${dimmedFloor ? 'text-gray-600' : 'text-gray-300'} ${floorIndex === currentFloorIndex ? 'text-amber-200' : ''}`}
+                className={`pointer-events-none absolute left-2 top-0 -translate-y-1/2 text-[11px] ${dimmedFloor ? 'text-gray-400' : 'text-gray-200'} ${floorIndex === currentFloorIndex ? 'text-amber-200' : ''}`}
                 style={{ top: floorY }}
               >
                 {floorNumber}
@@ -235,7 +248,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
                     style={{ left: node.x, top: floorY, width: nodeSize, height: nodeSize, transform: 'translate(-50%, -50%)' }}
                   >
                     <span
-                      className={`pointer-events-none absolute inset-0 rounded-full border-2 ${nodeRingClass(node.type)} ${current ? 'border-yellow-200/95 shadow-[0_0_24px_rgba(250,204,21,0.8)]' : ''} ${lockedDim ? 'opacity-45' : ''} ${isBoss ? 'border-amber-200/95 shadow-[0_0_30px_rgba(245,158,11,0.5)]' : ''}`}
+                      className={`pointer-events-none absolute inset-0 rounded-full border-2 bg-black/28 shadow-[0_0_10px_rgba(15,23,42,0.85)] ${nodeRingClass(node.type)} ${current ? 'border-yellow-200 shadow-[0_0_24px_rgba(250,204,21,0.8)]' : ''} ${lockedDim ? 'opacity-80' : ''} ${isBoss ? 'border-amber-200 shadow-[0_0_30px_rgba(245,158,11,0.5)]' : ''}`}
                     />
 
                     {isSelectable && (
@@ -254,7 +267,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
                         alt={node.type}
                         fill
                         sizes={`${nodeSize}px`}
-                        className={`object-cover ${lockedDim ? 'opacity-45' : ''} ${current ? 'scale-105' : ''}`}
+                        className={`object-cover ${lockedDim ? 'opacity-75' : 'opacity-100'} ${current ? 'scale-105' : ''}`}
                       />
                     </span>
 
@@ -269,24 +282,24 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
                     )}
 
                     {nodeDimmed && (
-                      <span className="pointer-events-none absolute inset-0 rounded-full bg-black/35" />
+                      <span className="pointer-events-none absolute inset-0 rounded-full bg-black/18" />
                     )}
                   </button>
                 );
               })}
 
-              {nodes.map((node) => (
-                <div
-                  key={`label-${node.id}`}
-                  className="absolute -bottom-7 w-20 text-center text-[11px] font-medium text-gray-200"
-                  style={{
-                    left: node.x - 40,
-                    top: floorY + (node.id === map.bossNodeId || node.type === 'boss' ? 44 : 36),
-                  }}
-                >
-                  {NODE_LABELS[node.type] ?? node.type}
-                </div>
-              ))}
+            {nodes.map((node) => (
+              <div
+                key={`label-${node.id}`}
+                className="absolute -bottom-7 w-20 text-center text-[11px] font-semibold text-gray-100"
+                style={{
+                  left: node.x - 40,
+                  top: floorY + (node.id === map.bossNodeId || node.type === 'boss' ? 44 : 36),
+                }}
+              >
+                {NODE_LABELS[node.type] ?? node.type}
+              </div>
+            ))}
             </div>
           );
         })}

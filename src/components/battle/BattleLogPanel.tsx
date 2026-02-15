@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface LiveLogEntry {
   id: number;
   text: string;
@@ -11,12 +13,21 @@ interface LiveLogPanelProps {
 }
 
 export function BattleLiveLogPanel({ logs }: LiveLogPanelProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
   if (logs.length === 0) return null;
 
   return (
     <div className="fixed top-20 right-3 sm:right-4 z-30 pointer-events-none space-y-1 w-[58vw] sm:w-[320px] max-w-[320px]">
       {logs.map((entry) => {
-        const age = Date.now() - entry.timestamp;
+        const age = now - entry.timestamp;
         const isFading = age > 3800;
         return (
           <div
@@ -49,12 +60,12 @@ export default function BattleLogPanel({ open, log, onClose }: BattleLogPanelPro
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">✕</button>
         </div>
         <div className="space-y-1">
-          {[...log].reverse().map((msg, i) => {
+          {log.map((msg, i) => {
             let colorClass = 'text-gray-300';
             let fontClass = 'text-xs';
             if (msg.includes('────') || msg.includes('턴 ')) {
               return (
-                <div key={i} className="text-center text-yellow-500/80 font-bold text-xs py-2 border-t border-yellow-500/20 mt-2">
+                <div key={i} className="text-center text-yellow-400/90 font-bold text-xs py-1.5 border-b border-yellow-500/30 mb-1">
                   {msg.replace(/\n/g, '')}
                 </div>
               );

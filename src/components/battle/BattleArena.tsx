@@ -1,7 +1,7 @@
 'use client';
 
 import { CSSProperties, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { BattleState, BattleAction, Deck, OwnedCard, CombatEvent } from '@/types/game';
+import { BattleState, BattleAction, Deck, OwnedCard, CombatEvent, BattleWarrior } from '@/types/game';
 import { getWarriorById, getTacticById } from '@/data/cards';
 import { initBattle, applyTactic, resolveCombat, selectAITactic } from '@/lib/battle-engine';
 import { SFX } from '@/lib/sound';
@@ -16,24 +16,17 @@ import BattleLogPanel from '@/components/battle/BattleLogPanel';
 import TacticPanel from '@/components/battle/TacticPanel';
 import WarriorSlot, { FloatingNumber } from '@/components/battle/WarriorSlot';
 import SlashEffect from '@/components/battle/SlashEffect';
+import CardDetailModal from '@/components/card/CardDetailModal';
 
 interface Props {
   deck: Deck;
   ownedCards: OwnedCard[];
   wins: number;
   onBattleEnd: (result: 'win' | 'lose' | 'draw') => void;
-  onBattleEndWithSummary?: (
-    result: 'win' | 'lose' | 'draw',
-    summary: {
-      teamHpBefore: number;
-      teamHpAfter: number;
-      teamDamage: number;
-    },
-  ) => void;
+  onBattleEndWithSummary?: (result: 'win' | 'lose' | 'draw') => void;
   onExit: () => void;
   streakReward?: { type: string; streak: number } | null;
   battleOptions?: BattleEngineOptions;
-  runTeamHp?: number;
 }
 
 interface LiveLogEntry {
@@ -48,11 +41,26 @@ interface TacticPreview {
   warnings: string[];
 }
 
-interface TargetForecastRow {
+interface ForecastLine {
+  id: string;
   attackerSide: 'player' | 'enemy';
-  lane: 'front' | 'mid' | 'back';
-  attackerName: string;
-  targetName: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+interface ForecastMarker {
+  id: string;
+  side: 'player' | 'enemy';
+  x: number;
+  y: number;
+}
+
+interface WarriorDetailTarget {
+  cardId: string;
+  owned: OwnedCard | null;
+  side: 'player' | 'enemy';
 }
 
 type TacticAnimState = 'activating' | 'fading' | 'removed';
@@ -89,12 +97,10 @@ export default function BattleArena({
   onExit,
   streakReward,
   battleOptions,
-  runTeamHp,
 }: Props) {
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [animating, setAnimating] = useState(false);
   const [showLog, setShowLog] = useState(false);
-  const [targetForecastSide, setTargetForecastSide] = useState<'player' | 'enemy'>('player');
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
   const [skillNames, setSkillNames] = useState<Record<string, string>>({});
   const [skillBanner, setSkillBanner] = useState<{ warriorName: string; skillName: string; side: 'player' | 'enemy' } | null>(null);
@@ -108,22 +114,20 @@ export default function BattleArena({
   const [liveLog, setLiveLog] = useState<LiveLogEntry[]>([]);
   const [slashEffect, setSlashEffect] = useState<{ style: CSSProperties; side: 'player' | 'enemy' } | null>(null);
   const [tacticAnimState, setTacticAnimState] = useState<Record<number, TacticAnimState>>({});
+  const [forecastLines, setForecastLines] = useState<ForecastLine[]>([]);
+  const [forecastMarkers, setForecastMarkers] = useState<ForecastMarker[]>([]);
+  const [forecastPeekSide, setForecastPeekSide] = useState<'none' | 'player' | 'enemy'>('none');
+  const [detailTarget, setDetailTarget] = useState<WarriorDetailTarget | null>(null);
 
   const tacticAnimRef = useRef<Record<number, TacticAnimState>>({});
   const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const arenaRef = useRef<HTMLDivElement>(null);
   const warriorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const setTacticAnim = useCallback((idx: number, state: TacticAnimState) => {
     tacticAnimRef.current = { ...tacticAnimRef.current, [idx]: state };
     setTacticAnimState((prev) => ({ ...prev, [idx]: state }));
   }, []);
-
-  const getBattleTeamHp = useCallback(() => {
-    if (!battle) return { max: 0, current: 0, damage: 0 };
-    const max = battle.player.warriors.reduce((sum, warrior) => sum + Math.max(0, warrior.maxHp), 0);
-    const current = battle.player.warriors.reduce((sum, warrior) => sum + Math.max(0, warrior.currentHp), 0);
-    return { max, current, damage: Math.max(0, max - current) };
-  }, [battle]);
 
   const addLiveLog = useCallback((text: string) => {
     const entry: LiveLogEntry = {
@@ -476,7 +480,7 @@ export default function BattleArena({
 
   const fieldEffectSummary = useMemo(
     () => (battle ? getFieldEffectSummary(battle.fieldEvent.effect) : { applied: [], pending: [] }),
-    [battle?.fieldEvent.effect]
+    [battle]
   );
 
   const tacticPreview = useMemo<TacticPreview | null>(() => {
@@ -587,58 +591,112 @@ export default function BattleArena({
     };
   }, [battle]);
 
-  const targetForecast = useMemo<TargetForecastRow[]>(() => {
-    if (!battle || battle.phase !== 'tactic') return [];
-    const rows: TargetForecastRow[] = [];
+  const updateTargetForecastOverlay = useCallback(() => {
+    if (!arenaRef.current || !battle || battle.phase !== 'tactic' || battle.result || animating) {
+      setForecastLines([]);
+      setForecastMarkers([]);
+      return;
+    }
+
+    const arenaRect = arenaRef.current.getBoundingClientRect();
+    const lines: ForecastLine[] = [];
+    const markerMap = new Map<string, ForecastMarker>();
+
+    const pushLine = (attacker: BattleWarrior, target: BattleWarrior, attackerSide: 'player' | 'enemy') => {
+      const attackerEl = warriorRefs.current.get(attacker.instanceId);
+      const targetEl = warriorRefs.current.get(target.instanceId);
+      if (!attackerEl || !targetEl) return;
+
+      const attackerRect = attackerEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+
+      const x1 = attackerRect.left - arenaRect.left + attackerRect.width / 2;
+      const y1 = attackerRect.top - arenaRect.top + (attackerSide === 'player' ? attackerRect.height * 0.3 : attackerRect.height * 0.7);
+      const x2 = targetRect.left - arenaRect.left + targetRect.width / 2;
+      const y2 = targetRect.top - arenaRect.top + (attackerSide === 'player' ? targetRect.height * 0.7 : targetRect.height * 0.3);
+
+      lines.push({
+        id: `${attacker.instanceId}-${target.instanceId}`,
+        attackerSide,
+        x1,
+        y1,
+        x2,
+        y2,
+      });
+
+      markerMap.set(target.instanceId, {
+        id: target.instanceId,
+        side: attackerSide,
+        x: x2,
+        y: y2,
+      });
+    };
 
     for (const lane of ARENA_LANES) {
       const attacker = battle.player.warriors.find((w) => w.lane === lane && w.isAlive);
       if (!attacker) continue;
-      const attackerName = getWarriorById(attacker.cardId)?.name || '아군';
       const fieldBlocked = lane === 'front' && battle.turn === 1 && battle.fieldEvent.effect === 'skip_front_first_turn';
       const stunned = attacker.statusEffects.some((e) => e.type === 'stun' && e.turnsLeft > 0);
-      if (fieldBlocked) {
-        rows.push({ attackerSide: 'player', lane, attackerName, targetName: '행동불가(야간 기습)' });
-      } else if (stunned) {
-        rows.push({ attackerSide: 'player', lane, attackerName, targetName: '행동불가(기절)' });
-      } else {
-        const target = getForecastTarget(battle.enemy.warriors);
-        if (target) {
-          rows.push({
-            attackerSide: 'player',
-            lane,
-            attackerName,
-            targetName: getWarriorById(target.cardId)?.name || '적군',
-          });
-        }
+      if (fieldBlocked || stunned) continue;
+      const target = getForecastTarget(battle.enemy.warriors);
+      if (target) {
+        pushLine(attacker, target, 'player');
       }
     }
 
     for (const lane of ARENA_LANES) {
       const attacker = battle.enemy.warriors.find((w) => w.lane === lane && w.isAlive);
       if (!attacker) continue;
-      const attackerName = getWarriorById(attacker.cardId)?.name || '적군';
       const fieldBlocked = lane === 'front' && battle.turn === 1 && battle.fieldEvent.effect === 'skip_front_first_turn';
       const stunned = attacker.statusEffects.some((e) => e.type === 'stun' && e.turnsLeft > 0);
-      if (fieldBlocked) {
-        rows.push({ attackerSide: 'enemy', lane, attackerName, targetName: '행동불가(야간 기습)' });
-      } else if (stunned) {
-        rows.push({ attackerSide: 'enemy', lane, attackerName, targetName: '행동불가(기절)' });
-      } else {
-        const target = getForecastTarget(battle.player.warriors);
-        if (target) {
-          rows.push({
-            attackerSide: 'enemy',
-            lane,
-            attackerName,
-            targetName: getWarriorById(target.cardId)?.name || '아군',
-          });
-        }
+      if (fieldBlocked || stunned) continue;
+      const target = getForecastTarget(battle.player.warriors);
+      if (target) {
+        pushLine(attacker, target, 'enemy');
       }
     }
 
-    return rows;
-  }, [battle]);
+    setForecastLines(lines);
+    setForecastMarkers(Array.from(markerMap.values()));
+  }, [animating, battle]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => updateTargetForecastOverlay());
+    return () => cancelAnimationFrame(raf);
+  }, [updateTargetForecastOverlay]);
+
+  useEffect(() => {
+    const handleResize = () => updateTargetForecastOverlay();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateTargetForecastOverlay]);
+
+  useEffect(() => {
+    if (!battle || battle.phase !== 'tactic' || battle.result || animating) {
+      setForecastPeekSide('none');
+    }
+  }, [animating, battle]);
+
+  const handleOpenWarriorDetail = useCallback((warrior: BattleWarrior, side: 'player' | 'enemy') => {
+    const playerOwned = ownedCards.find((owned) => owned.instanceId === warrior.instanceId) ?? null;
+    const fallbackOwned: OwnedCard = {
+      instanceId: warrior.instanceId,
+      cardId: warrior.cardId,
+      level: Math.max(1, warrior.level),
+      duplicates: 0,
+    };
+
+    setDetailTarget({
+      cardId: warrior.cardId,
+      side,
+      owned: side === 'player' ? (playerOwned ?? fallbackOwned) : fallbackOwned,
+    });
+  }, [ownedCards]);
+
+  const detailCard = useMemo(() => {
+    if (!detailTarget) return null;
+    return getWarriorById(detailTarget.cardId) ?? null;
+  }, [detailTarget]);
 
   const hpRace = useMemo(() => computeBattleFieldRace(battle), [battle]);
 
@@ -648,6 +706,7 @@ export default function BattleArena({
 
   return (
     <div
+      ref={arenaRef}
       className="min-h-screen p-4 relative overflow-hidden"
       style={{
         backgroundImage: 'url(/images/battle-bg.png)',
@@ -680,6 +739,67 @@ export default function BattleArena({
         fieldEffectSummary={fieldEffectSummary}
       />
 
+      {battle.phase === 'tactic' && !battle.result && !animating && forecastPeekSide !== 'none' && forecastLines.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-[6]">
+          <svg className="h-full w-full">
+            {forecastLines
+              .filter((line) => line.attackerSide === forecastPeekSide)
+              .map((line) => {
+              const color = line.attackerSide === 'player'
+                ? 'rgba(56, 189, 248, 0.45)'
+                : 'rgba(248, 113, 113, 0.45)';
+              const dx = line.x2 - line.x1;
+              const dy = line.y2 - line.y1;
+              const len = Math.sqrt((dx * dx) + (dy * dy)) || 1;
+              const ux = dx / len;
+              const uy = dy / len;
+              const arrowLen = 10;
+              const arrowWidth = 4.5;
+              const baseX = line.x2 - (ux * arrowLen);
+              const baseY = line.y2 - (uy * arrowLen);
+              const leftX = baseX + (-uy * arrowWidth);
+              const leftY = baseY + (ux * arrowWidth);
+              const rightX = baseX - (-uy * arrowWidth);
+              const rightY = baseY - (ux * arrowWidth);
+
+              return (
+                <g key={line.id}>
+                  <line
+                    x1={line.x1}
+                    y1={line.y1}
+                    x2={line.x2}
+                    y2={line.y2}
+                    stroke={color}
+                    strokeWidth={1.8}
+                    strokeDasharray={line.attackerSide === 'player' ? '6 6' : '2 6'}
+                    strokeLinecap="round"
+                  />
+                  <circle cx={line.x1} cy={line.y1} r={2.1} fill={color} />
+                  <circle cx={line.x2} cy={line.y2} r={2.4} fill={color} />
+                  <polygon points={`${line.x2},${line.y2} ${leftX},${leftY} ${rightX},${rightY}`} fill={color} />
+                </g>
+              );
+            })}
+          </svg>
+          {forecastMarkers
+            .filter((marker) => marker.side === forecastPeekSide)
+            .map((marker) => (
+            <span
+              key={`marker-${marker.id}`}
+              className="absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border animate-pulse"
+              style={{
+                left: marker.x,
+                top: marker.y,
+                borderColor: marker.side === 'player' ? 'rgba(56, 189, 248, 0.55)' : 'rgba(248, 113, 113, 0.55)',
+                boxShadow: marker.side === 'player'
+                  ? '0 0 16px rgba(56, 189, 248, 0.22)'
+                  : '0 0 16px rgba(248, 113, 113, 0.22)',
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {battle.activeSynergies && battle.activeSynergies.filter((s) => s.side === 'enemy').length > 0 && (
         <div className="flex justify-center gap-2 mb-2">
           {battle.activeSynergies.filter((s) => s.side === 'enemy').map((syn, i) => (
@@ -708,12 +828,14 @@ export default function BattleArena({
           return warrior ? (
             <div key={lane} ref={(el) => { if (el) warriorRefs.current.set(warrior.instanceId, el); }}>
               <WarriorSlot
+                key={warrior.instanceId}
                 warrior={warrior}
                 isPlayer={false}
                 isAttacking={attackingId === warrior.instanceId}
                 isHit={hitId === warrior.instanceId}
                 floatingNumbers={floatingNumbers.filter((f) => f.targetId === warrior.instanceId)}
                 showSkillName={skillNames[warrior.instanceId] || null}
+                onOpenDetail={() => handleOpenWarriorDetail(warrior, 'enemy')}
               />
             </div>
           ) : null;
@@ -724,8 +846,36 @@ export default function BattleArena({
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-yellow-500/30" />
         </div>
-        <div className="relative px-4 py-1 bg-yellow-900/50 backdrop-blur-sm rounded-full border border-yellow-500/40">
+        <div className="relative flex items-center gap-2 px-3 py-1 bg-yellow-900/50 backdrop-blur-sm rounded-full border border-yellow-500/40">
           <span className="text-xl font-black text-yellow-400" style={{ textShadow: '0 0 10px rgba(234,179,8,0.4)' }}>⚔️ VS</span>
+          {battle.phase === 'tactic' && !battle.result && !animating && (
+            <div className="pointer-events-auto flex items-center gap-1">
+              <button
+                type="button"
+                onMouseDown={() => setForecastPeekSide('player')}
+                onMouseUp={() => setForecastPeekSide('none')}
+                onMouseLeave={() => setForecastPeekSide('none')}
+                onTouchStart={() => setForecastPeekSide('player')}
+                onTouchEnd={() => setForecastPeekSide('none')}
+                onTouchCancel={() => setForecastPeekSide('none')}
+                className="rounded-full border border-cyan-300/45 bg-cyan-900/35 px-2 py-0.5 text-[10px] font-bold text-cyan-100 active:scale-95"
+              >
+                홀드: 아군
+              </button>
+              <button
+                type="button"
+                onMouseDown={() => setForecastPeekSide('enemy')}
+                onMouseUp={() => setForecastPeekSide('none')}
+                onMouseLeave={() => setForecastPeekSide('none')}
+                onTouchStart={() => setForecastPeekSide('enemy')}
+                onTouchEnd={() => setForecastPeekSide('none')}
+                onTouchCancel={() => setForecastPeekSide('none')}
+                className="rounded-full border border-red-300/45 bg-red-900/35 px-2 py-0.5 text-[10px] font-bold text-red-100 active:scale-95"
+              >
+                홀드: 적군
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -736,12 +886,14 @@ export default function BattleArena({
           return warrior ? (
             <div key={lane} ref={(el) => { if (el) warriorRefs.current.set(warrior.instanceId, el); }}>
               <WarriorSlot
+                key={warrior.instanceId}
                 warrior={warrior}
                 isPlayer
                 isAttacking={attackingId === warrior.instanceId}
                 isHit={hitId === warrior.instanceId}
                 floatingNumbers={floatingNumbers.filter((f) => f.targetId === warrior.instanceId)}
                 showSkillName={skillNames[warrior.instanceId] || null}
+                onOpenDetail={() => handleOpenWarriorDetail(warrior, 'player')}
               />
             </div>
           ) : null;
@@ -774,10 +926,7 @@ export default function BattleArena({
         deck={deck}
         animating={animating}
         tacticAnimState={tacticAnimState}
-        selectedTacticSide={targetForecastSide}
-        targetForecast={targetForecast}
         tacticPreview={tacticPreview}
-        onSideChange={setTargetForecastSide}
         onSelectTactic={handleSelectTactic}
         onConfirmTactic={handleConfirmTactic}
       />
@@ -814,13 +963,7 @@ export default function BattleArena({
           <div>
             <button
               onClick={() => {
-                const team = getBattleTeamHp();
-                const teamHpBefore = Number.isFinite(runTeamHp ?? 0) ? Math.max(0, runTeamHp ?? 0) : team.max;
-                onBattleEndWithSummary?.(battle.result!, {
-                  teamHpBefore,
-                  teamHpAfter: team.current,
-                  teamDamage: team.damage,
-                });
+                onBattleEndWithSummary?.(battle.result!);
                 onBattleEnd(battle.result!);
               }}
               className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-all hover:scale-105 active:scale-95"
@@ -831,6 +974,13 @@ export default function BattleArena({
           </div>
         </div>
       )}
+
+      <CardDetailModal
+        card={detailCard}
+        owned={detailTarget?.owned ?? null}
+        sourceTag={detailTarget ? (detailTarget.side === 'player' ? '아군 장수' : '적군 장수') : undefined}
+        onClose={() => setDetailTarget(null)}
+      />
 
       <BattleLogPanel open={showLog} log={battle.log} onClose={() => setShowLog(false)} />
     </div>

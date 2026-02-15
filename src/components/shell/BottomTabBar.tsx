@@ -15,12 +15,13 @@ const TABS = [
 export default function BottomTabBar() {
   const pathname = usePathname();
   const { state } = useGameStateContext();
+
   const unopenedPackCount = useMemo(
     () => state.boosterPacks.filter((pack) => !pack.opened).length,
     [state.boosterPacks]
   );
 
-  const isVisible = !pathname?.startsWith('/roguelike');
+  const isVisible = !pathname?.startsWith('/roguelike') && pathname !== '/';
 
   if (!isVisible) {
     return null;

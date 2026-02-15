@@ -9,6 +9,10 @@ import {
 } from '@/lib/roguelike/run-types';
 import { getEnemyTemplate } from '@/lib/roguelike/enemy-generator';
 import { pickRandomEvent } from '@/lib/roguelike/events';
+import { DeterministicRandom } from '@/lib/rng';
+import { randomInt, randomPick } from '@/lib/rng';
+
+const DEFAULT_RANDOM: DeterministicRandom = { next: Math.random };
 
 const ACT_COLUMNS: Record<RunAct, number> = {
   1: 8,
@@ -20,14 +24,12 @@ const ROW_OPTIONS: ReadonlyArray<2 | 3> = [2, 3];
 
 type RowCount = typeof ROW_OPTIONS[number];
 
-function randomPick<T>(items: readonly T[]): T {
-  if (items.length === 0) throw new Error('빈 배열에서 랜덤 선택 불가');
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function randomInt(maxExclusive: number): number {
-  if (maxExclusive <= 0) return 0;
-  return Math.floor(Math.random() * maxExclusive);
+function randomIdPrefix(random: DeterministicRandom): string {
+  let value = '';
+  for (let i = 0; i < 8; i++) {
+    value += Math.floor(random.next() * 16).toString(16);
+  }
+  return value;
 }
 
 function laneFromRow(row: number): Lane {
@@ -39,9 +41,10 @@ function makeNode(
   column: number,
   row: number,
   type: RunNodeType
+  , random: DeterministicRandom
 ): RoguelikeMapNode {
   return {
-    id: `act-${act}-c${column}-r${row}-${Math.random().toString(36).slice(2, 10)}`,
+    id: `act-${act}-c${column}-r${row}-${randomIdPrefix(random)}`,
     act,
     column,
     row,
@@ -50,41 +53,41 @@ function makeNode(
   };
 }
 
-function generateRowCount(columns: number): RowCount[] {
-  return Array.from({ length: columns }, () => randomPick(ROW_OPTIONS));
+function generateRowCount(columns: number, random: DeterministicRandom): RowCount[] {
+  return Array.from({ length: columns }, () => randomPick(ROW_OPTIONS, random));
 }
 
-function pickPathRows(rowCounts: RowCount[]): number[] {
+function pickPathRows(rowCounts: RowCount[], random: DeterministicRandom): number[] {
   const pathRows: number[] = [];
   for (let col = 0; col < rowCounts.length; col++) {
     const rows = rowCounts[col];
     if (col === 0) {
-      pathRows.push(randomInt(rows));
+      pathRows.push(randomInt(rows, random));
       continue;
     }
     if (col === rowCounts.length - 1) {
       const min = Math.max(0, pathRows[pathRows.length - 1] - 1);
       const max = Math.min(rows - 1, pathRows[pathRows.length - 1] + 1);
-      pathRows.push(randomInt(max - min + 1) + min);
+      pathRows.push(randomInt(max - min + 1, random) + min);
       continue;
     }
     const prev = pathRows[pathRows.length - 1];
     const candidates = [prev];
     if (prev > 0) candidates.push(prev - 1);
     if (prev < rows - 1) candidates.push(prev + 1);
-    pathRows.push(randomPick(candidates));
+    pathRows.push(randomPick(candidates, random));
   }
   return pathRows;
 }
 
-function countByType(act: RunAct, type: RunNodeType): number {
+function countByTypeWithRandom(act: RunAct, type: RunNodeType, random: DeterministicRandom): number {
   switch (type) {
     case 'shop':
-      return act === 3 ? 1 : (Math.random() < 0.65 ? 1 : 2);
+      return act === 3 ? 1 : (random.next() < 0.65 ? 1 : 2);
     case 'rest':
       return 1;
     case 'elite':
-      if (act === 1) return Math.random() < 0.6 ? 1 : 2;
+      if (act === 1) return random.next() < 0.6 ? 1 : 2;
       if (act === 2) return 2;
       return 3;
     default:
@@ -92,21 +95,21 @@ function countByType(act: RunAct, type: RunNodeType): number {
   }
 }
 
-export function generateActMap(act: RunAct): RoguelikeMap {
+export function generateActMap(act: RunAct, random: DeterministicRandom = DEFAULT_RANDOM): RoguelikeMap {
   const columns = ACT_COLUMNS[act] ?? 8;
-  const rowCounts = generateRowCount(columns);
+  const rowCounts = generateRowCount(columns, random);
   const columnNodes: RoguelikeMapNode[][] = [];
 
   for (let col = 0; col < columns; col++) {
     const rowCount = rowCounts[col];
     const nodes: RoguelikeMapNode[] = [];
     for (let row = 0; row < rowCount; row++) {
-      nodes.push(makeNode(act, col, row, 'battle'));
+      nodes.push(makeNode(act, col, row, 'battle', random));
     }
     columnNodes.push(nodes);
   }
 
-  const pathRows = pickPathRows(rowCounts);
+  const pathRows = pickPathRows(rowCounts, random);
   const pathNodes = new Set<string>([
     ...pathRows.map((row, col) => `${col}-${row}`),
   ]);
@@ -122,21 +125,21 @@ export function generateActMap(act: RunAct): RoguelikeMap {
   };
 
   // Ensure minimum special nodes
-  const targets = {
-    shop: countByType(act, 'shop'),
-    rest: countByType(act, 'rest'),
-    elite: countByType(act, 'elite'),
+  const randomizedTargets = {
+    shop: countByTypeWithRandom(act, 'shop', random),
+    rest: countByTypeWithRandom(act, 'rest', random),
+    elite: countByTypeWithRandom(act, 'elite', random),
   };
 
-  const candidatesByType = Object.entries(targets) as Array<[RunNodeType, number]>;
+  const candidatesByType = Object.entries(randomizedTargets) as Array<[RunNodeType, number]>;
 
   for (const [type, need] of candidatesByType) {
     let remaining = need;
     const attempts = Array.from({ length: columns * 2 });
     let i = 0;
     while (remaining > 0 && i < attempts.length) {
-      const col = 1 + randomInt(columns - 2);
-      const row = randomInt(rowCounts[col]);
+      const col = 1 + randomInt(columns - 2, random);
+      const row = randomInt(rowCounts[col], random);
       const idx = `${col}-${row}`;
       const node = columnNodes[col][row];
       const isPath = pathNodes.has(idx);
@@ -161,7 +164,7 @@ export function generateActMap(act: RunAct): RoguelikeMap {
   for (let col = 1; col < columns - 1; col++) {
     for (const node of columnNodes[col]) {
       if (node.type !== 'battle') continue;
-      if (Math.random() < 0.22) {
+      if (random.next() < 0.22) {
         node.type = 'event';
       }
     }
@@ -181,11 +184,11 @@ export function generateActMap(act: RunAct): RoguelikeMap {
       const forcedTo = Math.max(0, Math.min(toRows - 1, pathRows[col + 1]));
       targets.add(forcedTo);
 
-      const addCount = 1 + randomInt(2); // 1~2
+      const addCount = 1 + randomInt(2, random); // 1~2
       while (targets.size < addCount) {
-        let candidate = randomInt(toRows);
-        if (toRows > 1 && Math.random() < 0.7) {
-          const dx = randomInt(3) - 1;
+        let candidate = randomInt(toRows, random);
+        if (toRows > 1 && random.next() < 0.7) {
+          const dx = randomInt(3, random) - 1;
           const prefer = Math.max(0, Math.min(toRows - 1, row + dx));
           candidate = prefer;
         }
@@ -216,7 +219,7 @@ export function generateActMap(act: RunAct): RoguelikeMap {
       const incoming = inCount.get(node.id) || 0;
       if (incoming > 0) continue;
       const prev = columnNodes[col - 1];
-      const from = randomPick(prev);
+      const from = randomPick(prev, random);
       const key = `${from.id}->${node.id}`;
       if (!edgeSet.has(key)) {
         edgeSet.add(key);
@@ -244,17 +247,17 @@ export function generateActMap(act: RunAct): RoguelikeMap {
   };
 }
 
-export function attachEncounterData(map: RoguelikeMap): RoguelikeMap {
+export function attachEncounterData(map: RoguelikeMap, random: DeterministicRandom = DEFAULT_RANDOM): RoguelikeMap {
   const nodes = map.nodes.map((node) => {
     const next = { ...node };
 
     if (next.type === 'battle' || next.type === 'elite' || next.type === 'boss') {
-      next.enemy = getEnemyTemplate(next.act, next.type);
+      next.enemy = getEnemyTemplate(next.act, next.type, random);
       return next;
     }
 
     if (next.type === 'event') {
-      const event = pickRandomEvent();
+      const event = pickRandomEvent(random);
       next.eventId = event.id;
     }
 

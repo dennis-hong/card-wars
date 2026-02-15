@@ -67,30 +67,6 @@ function createBattleWarrior(
   };
 }
 
-function scalePlayerWarriorsForRunHp(
-  warriors: BattleWarrior[],
-  teamHp: number | undefined,
-  maxTeamHp: number | undefined,
-): BattleWarrior[] {
-  if (teamHp === undefined || maxTeamHp === undefined || !Number.isFinite(teamHp) || !Number.isFinite(maxTeamHp) || maxTeamHp <= 0) {
-    return warriors;
-  }
-
-  const ratio = Math.max(0, Math.min(1, teamHp / maxTeamHp));
-  if (ratio >= 1) return warriors;
-
-  return warriors.map((warrior) => {
-    const scaledMaxHp = Math.floor(warrior.maxHp * ratio);
-    const scaledCurrentHp = Math.floor(warrior.currentHp * ratio);
-    return {
-      ...warrior,
-      maxHp: scaledMaxHp,
-      currentHp: scaledCurrentHp,
-      isAlive: scaledCurrentHp > 0 && warrior.isAlive,
-    };
-  });
-}
-
 function applyFactionSynergy(
   warriors: BattleWarrior[],
 ): Array<BattleSynergy> {
@@ -209,24 +185,20 @@ export function initBattle(
     : 1;
   const enemyTactics = buildAITactics(avgTacticLevel, random);
 
-  const scaledPlayerWarriors = scalePlayerWarriorsForRunHp(
-    playerWarriors,
-    options.teamHp,
-    options.maxTeamHp,
-  );
-  const playerSynergies = applyFactionSynergy(scaledPlayerWarriors).map((s) => ({ ...s, side: 'player' as const }));
+  const playerSynergies = applyFactionSynergy(playerWarriors).map((s) => ({ ...s, side: 'player' as const }));
   const enemySynergies = applyFactionSynergy(enemyWarriors).map((s) => ({ ...s, side: 'enemy' as const }));
   const activeSynergies = [...playerSynergies, ...enemySynergies];
 
-  applyBrothersSynergy(scaledPlayerWarriors, playerSynergies);
+  applyBrothersSynergy(playerWarriors, playerSynergies);
   applyBrothersSynergy(enemyWarriors, enemySynergies);
 
   const battleState: BattleState = {
     turn: 1,
-    maxTurns: 3,
+    maxTurns: 30,
+    stalemateTurns: 0,
     phase: 'tactic',
     player: {
-      warriors: scaledPlayerWarriors,
+      warriors: playerWarriors,
       tactics: playerTactics,
       selectedTactic: null,
     },

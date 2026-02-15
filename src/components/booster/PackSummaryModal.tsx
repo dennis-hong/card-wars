@@ -55,7 +55,7 @@ export default function PackSummaryModal({
               onClick={() => onCardClick(card, isNew)}
             >
               {cardData.type === 'warrior' ? (
-                <WarriorCardView card={cardData} size="md" showDetails />
+                <WarriorCardView card={cardData} size="md" />
               ) : (
                 <TacticCardView card={cardData} size="md" />
               )}

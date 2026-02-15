@@ -423,8 +423,6 @@ function sanitizeRunState(raw: unknown): RunState {
     phase?: unknown;
     deck?: unknown;
     relics?: unknown;
-    teamHp?: unknown;
-    maxTeamHp?: unknown;
     gold?: unknown;
     inventory?: unknown;
     map?: unknown;
@@ -439,8 +437,6 @@ function sanitizeRunState(raw: unknown): RunState {
   };
 
   const now = Date.now();
-  const maxTeamHp = Math.max(1, clampInt(candidate.maxTeamHp, 100));
-  const teamHp = Math.max(0, Math.min(maxTeamHp, clampInt(candidate.teamHp, maxTeamHp)));
   const startedAt = Number.isFinite(Number(candidate.startedAt)) ? clampInt(candidate.startedAt, now) : now;
   const updatedAt = Number.isFinite(Number(candidate.updatedAt)) ? clampInt(candidate.updatedAt, now) : now;
 
@@ -484,8 +480,6 @@ function sanitizeRunState(raw: unknown): RunState {
     relics: Array.isArray(candidate.relics)
       ? candidate.relics.filter((relic): relic is string => typeof relic === 'string')
       : [],
-    teamHp,
-    maxTeamHp,
     gold: Math.max(0, clampInt(candidate.gold, 0)),
     inventory: Array.isArray(candidate.inventory)
       ? candidate.inventory.map((item) => normalizeOwnedCard(item)).filter(Boolean) as OwnedCard[]
@@ -516,8 +510,6 @@ export function createEmptyRunState(): RunState {
     phase: 'idle',
     deck: { id: generateId(), name: '원정대', warriors: [], tactics: [] },
     relics: [],
-    teamHp: 100,
-    maxTeamHp: 100,
     gold: 0,
     inventory: [],
     map: null,

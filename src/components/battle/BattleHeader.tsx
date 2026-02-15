@@ -37,7 +37,7 @@ export default function BattleHeader({
         <div className="text-center">
           <div className="text-white font-black text-base sm:text-lg tracking-wide">턴 {battle.turn}/{battle.maxTurns}</div>
           <div className="text-[9px] sm:text-[10px] text-yellow-200/80">
-            승패 규칙: {battle.maxTurns}턴 종료 시 총 HP 높은 쪽 승리
+            승패 규칙: 한 쪽 전멸 시 즉시 승패 확정, {battle.maxTurns}턴 종료 또는 장기 교착 시 무승부로 판정(탐험 패배 처리)
           </div>
           <div className="text-[9px] sm:text-[10px] text-gray-200/80 mt-0.5">
             HP 합산: <span className="text-blue-300">아군 {hpRace.playerHp}</span> vs <span className="text-red-300">적군 {hpRace.enemyHp}</span>

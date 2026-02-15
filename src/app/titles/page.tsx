@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { TITLES } from '@/data/titles';
+import { getTitleCategoryLabel, TITLES } from '@/data/titles';
 import { useGameStateContext } from '@/context/GameStateContext';
 import { SFX } from '@/lib/sound';
 
@@ -49,7 +49,7 @@ export default function TitlesPage() {
                   </div>
                   <div className={`text-xs mt-0.5 ${earned ? 'text-gray-300' : 'text-gray-400'}`}>{title.description}</div>
                   <div className={`text-[10px] mt-0.5 ${earned ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {title.category === 'wins' ? '🏆 승리' : title.category === 'collection' ? '📚 수집' : '🔥 연승'}
+                    {getTitleCategoryLabel(title.category)}
                   </div>
                 </div>
                 {earned && !isActive && (

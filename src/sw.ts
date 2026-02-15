@@ -1,17 +1,19 @@
+/// <reference lib="WebWorker" />
+
 (function initServiceWorker() {
-  const scope: any = self;
+  const scope = self as unknown as ServiceWorkerGlobalScope & typeof globalThis;
   const APP_CACHE = 'card-wars-cache-v1';
   const IMAGE_CACHE = 'card-wars-images-v1';
   const STATIC_ASSETS = ['/', '/manifest.json', '/images/logo.png'];
 
-  scope.addEventListener('install', (event: any) => {
+  scope.addEventListener('install', (event: ExtendableEvent) => {
     event.waitUntil(
-      caches.open(APP_CACHE).then((cache: any) => cache.addAll(STATIC_ASSETS)),
+      caches.open(APP_CACHE).then((cache: Cache) => cache.addAll(STATIC_ASSETS)),
     );
     scope.skipWaiting();
   });
 
-  scope.addEventListener('activate', (event: any) => {
+  scope.addEventListener('activate', (event: ExtendableEvent) => {
     event.waitUntil(
       Promise.all([
         scope.clients?.claim?.(),
@@ -26,7 +28,7 @@
     );
   });
 
-  scope.addEventListener('fetch', (event: any) => {
+  scope.addEventListener('fetch', (event: FetchEvent) => {
     const req = event.request;
     const url = new URL(req.url);
 
@@ -41,7 +43,7 @@
 
     if (url.pathname.startsWith('/images/') || req.destination === 'image') {
       event.respondWith(
-        caches.open(IMAGE_CACHE).then(async (cache: any) => {
+        caches.open(IMAGE_CACHE).then(async (cache: Cache) => {
           const cached = await cache.match(req);
           if (cached) return cached;
 

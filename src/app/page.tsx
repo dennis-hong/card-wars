@@ -10,7 +10,7 @@ import { SFX } from '@/lib/sound';
 
 export default function Home() {
   const router = useRouter();
-  const { state, loaded, enhanceableCount } = useGameStateContext();
+  const { state, loaded } = useGameStateContext();
   const { state: runState, loaded: runLoaded } = useRunContext();
 
   const activeTitleData = useMemo(
@@ -21,8 +21,8 @@ export default function Home() {
   const canContinueRun = runLoaded && runState.phase !== 'idle' && runState.phase !== 'ended';
   const runSubtitle = useMemo(() => {
     if (!canContinueRun) return '';
-    return `이어하기 Act ${runState.currentAct} · HP ${runState.teamHp}/${runState.maxTeamHp}`;
-  }, [canContinueRun, runState.currentAct, runState.maxTeamHp, runState.teamHp]);
+    return `이어하기 Act ${runState.currentAct}`;
+  }, [canContinueRun, runState.currentAct]);
 
   const navigate = (path: string) => {
     SFX.buttonClick();
@@ -49,7 +49,7 @@ export default function Home() {
       />
       <div className="fixed inset-0 z-0 bg-gradient-to-b from-black/75 via-black/55 to-black/85" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-4 py-8 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-4 py-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <section className="mb-8 w-full animate-[slideUp_260ms_ease] text-center">
           <div
             className="mb-4"
@@ -115,24 +115,40 @@ export default function Home() {
             <div className="text-left">
               <div className="text-2xl font-black">🗺️ 탐험 시작</div>
               <div className="text-sm font-medium text-gray-100/90">
-                {canContinueRun ? runSubtitle : '3개 시작팩 자동 개봉'}
+                {canContinueRun ? runSubtitle : '시작팩 개봉 후 덱 편성'}
               </div>
             </div>
           </button>
 
           <button
-            onClick={() => navigate('/battle')}
+            onClick={() => navigate('/roguelike?mode=practice')}
             className="ui-btn ui-btn-neutral w-full min-h-[52px] border border-white/10"
           >
             ⚔️ 연습 대전
           </button>
+
+          <button
+            onClick={() => navigate('/collection')}
+            className="ui-btn ui-btn-neutral w-full min-h-[48px] border border-white/10"
+          >
+            🃏 카드 도감
+          </button>
+
+          <button
+            onClick={() => navigate('/titles')}
+            className="ui-btn ui-btn-neutral w-full min-h-[48px] border border-white/10"
+          >
+            🏆 칭호
+          </button>
+
+          <button
+            onClick={() => navigate('/settings')}
+            className="ui-btn ui-btn-neutral w-full min-h-[48px] border border-white/10"
+          >
+            ⚙️ 설정
+          </button>
         </section>
 
-        {enhanceableCount > 0 && (
-          <p className="mt-3 min-h-[20px] rounded-lg border border-emerald-300/40 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
-            강화 가능 카드가 {enhanceableCount}장 남아 있습니다.
-          </p>
-        )}
       </div>
     </main>
   );

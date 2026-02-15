@@ -1,9 +1,11 @@
 'use client';
 
 import Image from 'next/image';
+import { useState } from 'react';
 import { Grade, BattleWarrior } from '@/types/game';
 import { getWarriorById } from '@/data/cards';
 import { GRADE_COLORS } from '@/types/game';
+import { getWarriorImage } from '@/lib/warrior-images';
 
 export interface FloatingNumber {
   id: string;
@@ -21,6 +23,7 @@ export interface WarriorSlotProps {
   isHit: boolean;
   floatingNumbers: FloatingNumber[];
   showSkillName: string | null;
+  onOpenDetail?: () => void;
 }
 
 function getStatusMeta(type: BattleWarrior['statusEffects'][number]['type']) {
@@ -61,8 +64,12 @@ export default function WarriorSlot({
   isHit,
   floatingNumbers,
   showSkillName,
+  onOpenDetail,
 }: WarriorSlotProps) {
   const card = getWarriorById(warrior.cardId);
+  const [imgError, setImgError] = useState(false);
+  const portraitSrc = getWarriorImage(card?.id ?? '');
+
   if (!card) return null;
 
   const hpPercent = warrior.maxHp > 0 ? (warrior.currentHp / warrior.maxHp) * 100 : 0;
@@ -73,10 +80,13 @@ export default function WarriorSlot({
 
   return (
     <div
+      onClick={onOpenDetail}
       className={`
         relative rounded-xl p-1.5 sm:p-2 text-center w-[92px] sm:w-[100px] transition-all duration-300
+        ${onOpenDetail ? 'cursor-pointer' : ''}
         ${isDead ? 'opacity-40 grayscale' : 'opacity-100'}
         ${isAttacking ? 'z-10' : ''}
+        ${isHit ? 'z-10' : ''}
       `}
       style={{
         animation: isAttacking
@@ -88,22 +98,46 @@ export default function WarriorSlot({
           : 'none',
         background: isAttacking
           ? 'rgba(255,200,0,0.15)'
+          : isHit
+          ? 'rgba(220,38,38,0.22)'
           : isPlayer
           ? 'rgba(30,58,138,0.5)'
           : 'rgba(127,29,29,0.5)',
         backdropFilter: 'blur(8px)',
         border: isAttacking
           ? `2px solid rgba(255,200,0,0.8)`
+          : isHit
+          ? '2px solid rgba(248, 113, 113, 0.95)'
           : `2px solid ${gradeColor}66`,
         boxShadow: isAttacking
           ? '0 0 20px rgba(255,200,0,0.6), 0 0 40px rgba(255,200,0,0.3)'
           : isHit
-          ? '0 0 15px rgba(255,0,0,0.5)'
+          ? '0 0 24px rgba(239,68,68,0.8), inset 0 0 14px rgba(239,68,68,0.35)'
           : isLegend
           ? `0 0 12px ${gradeColor}44`
           : 'none',
       }}
     >
+      {isAttacking && !isDead && (
+        <div className="absolute -top-2 -right-1 z-20 rounded-full border border-yellow-200/80 bg-yellow-500/90 px-1.5 py-0.5 text-[8px] font-black text-black shadow-[0_0_10px_rgba(234,179,8,0.8)]">
+          공격
+        </div>
+      )}
+
+      {isHit && !isDead && (
+        <div className="absolute -top-2 -left-1 z-20 rounded-full border border-red-200/80 bg-red-600/95 px-1.5 py-0.5 text-[8px] font-black text-white shadow-[0_0_12px_rgba(239,68,68,0.9)]">
+          피격
+        </div>
+      )}
+
+      {isAttacking && !isDead && (
+        <div className="pointer-events-none absolute inset-0 rounded-xl border-2 border-yellow-300/80 animate-pulse" />
+      )}
+
+      {isHit && !isDead && (
+        <div className="pointer-events-none absolute inset-0 rounded-xl border-2 border-red-300/90 animate-pulse" />
+      )}
+
       {floatingNumbers.map((fn) => (
         <div
           key={fn.id}
@@ -151,13 +185,19 @@ export default function WarriorSlot({
       </div>
 
       {(() => {
-        const img = card.image;
-        return img && !isDead ? (
+        return portraitSrc && !imgError && !isDead ? (
           <div
             className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden mx-auto mt-1"
             style={{ border: `2px solid ${gradeColor}88` }}
           >
-            <Image src={img} alt={card.name} fill sizes="(max-width: 640px) 40px, 48px" className="w-full h-full object-cover" />
+            <Image
+              src={portraitSrc}
+              alt={card.name}
+              fill
+              sizes="(max-width: 640px) 40px, 48px"
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
           </div>
         ) : (
           <div className="text-xl sm:text-2xl mt-1">{isDead ? '💀' : card.grade === 4 ? '🌟' : '⚔️'}</div>

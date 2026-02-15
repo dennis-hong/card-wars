@@ -33,7 +33,10 @@ import {
 import { getRelicById, hasRelic as runHasRelic } from '@/lib/roguelike/relics';
 import { usePathname, useRouter } from 'next/navigation';
 
-type BattleDamageSummary = { teamDamage: number; teamHpBefore: number; teamHpAfter: number };
+type BattleDamageSummary = {
+  playerWarriorsAlive?: number;
+  enemyWarriorsAlive?: number;
+};
 type RunPhaseRoute = 'idle' | 'opening' | 'deck_build' | 'running' | 'reward' | 'event' | 'shop' | 'rest' | 'battle' | 'ended';
 
 interface AddCardsResult {
@@ -51,7 +54,7 @@ interface RunContextValue {
   ensureStarterComposition: () => void;
   saveDeck: (deck: Deck) => void;
   goToMap: () => void;
-  completeBattle: (result: CombatResult, summary: BattleDamageSummary) => void;
+  completeBattle: (result: CombatResult, summary?: BattleDamageSummary) => void;
   chooseEvent: (choiceId: string) => void;
   selectNode: (nodeId: RunNodeId) => boolean;
   goHome: () => void;
@@ -60,7 +63,7 @@ interface RunContextValue {
   upgradeWarriorInRun: (instanceId: string) => boolean;
   grantRelic: (relicId: string, replaceRelicId?: string) => boolean;
   claimRewardCards: (cards: Card[]) => void;
-  acknowledgeReward: () => void;
+  acknowledgeReward: (nextRoute?: string) => void;
   getCurrentNodeType: () => RunNodeType | null;
   getCurrentNodeReachable: () => Set<RunNodeId>;
   isReachableNode: (nodeId: RunNodeId) => boolean;
@@ -90,14 +93,6 @@ function normalizeDeck(deck: Deck, ownedCards: OwnedCard[]): Deck {
     warriors: safeWarriors.slice(0, 3),
     tactics: safeTactics.slice(0, 2),
   };
-}
-
-function computeHealFromRelics(relicIds: string[]): number {
-  return relicIds.reduce((sum, relicId) => {
-    const relic = getRelicById(relicId);
-    if (!relic || relic.effect.type !== 'heal_on_win') return sum;
-    return sum + (relic.effect.value || 0);
-  }, 0);
 }
 
 function countCardType(
@@ -134,17 +129,14 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     addCards: addCardsToGlobal,
     setActiveDeck,
     saveDeck: saveGameDeck,
+    recordScenarioClear,
   } = game;
 
   const [state, setState] = useState<RunState>(() => {
     const loaded = loadRunState();
     return loaded ?? createEmptyRunState();
   });
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setLoaded(true);
-  }, []);
+  const [loaded] = useState(true);
 
   useEffect(() => {
     if (loaded) {
@@ -493,7 +485,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     return success;
   }, []);
 
-  const completeBattle = useCallback((result: CombatResult, summary: BattleDamageSummary) => {
+  const completeBattle = useCallback((result: CombatResult, _summary?: BattleDamageSummary) => {
     if (!state.currentNodeId || !state.map || !state.currentAct) return;
     const node = getNodeById(state.map, state.currentNodeId);
     if (!node || (node.type !== 'battle' && node.type !== 'elite' && node.type !== 'boss')) return;
@@ -503,15 +495,13 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     const rewardGold = goldRange
       ? Math.floor(Math.random() * (goldRange.max - goldRange.min + 1)) + goldRange.min
       : 0;
-    const teamHpAfter = Math.max(0, Math.floor(summary.teamHpAfter));
-    const hpAfterDamage = Math.max(0, teamHpAfter);
 
     if (result !== 'win') {
+      recordScenarioClear();
       setState((prev) => ({
         ...prev,
         phase: 'ended',
         result: 'loss',
-        teamHp: Math.max(0, Math.min(prev.maxTeamHp, hpAfterDamage)),
         stats: {
           ...prev.stats,
           battlesFought: prev.stats.battlesFought + 1,
@@ -523,9 +513,6 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     }
 
     setState((prev) => {
-      const relicHeal = computeHealFromRelics(prev.relics);
-      const hpAfter = Math.min(prev.maxTeamHp, hpAfterDamage + relicHeal);
-
       const nextReward: RunRewardPayload = {
         sourceNodeId: node.id,
         sourceType: node.type,
@@ -535,7 +522,6 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       };
       const base: RunState = {
         ...prev,
-        teamHp: hpAfter,
         stats: {
           ...prev.stats,
           battlesWon: prev.stats.battlesWon + 1,
@@ -564,6 +550,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       }
 
       if (node.type === 'boss' && prev.currentAct === 3) {
+        recordScenarioClear();
         return {
           ...base,
           result: 'win',
@@ -572,7 +559,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
 
       return base;
     });
-  }, [state.currentAct, state.currentNodeId, state.map]);
+  }, [recordScenarioClear, state.currentAct, state.currentNodeId, state.map]);
 
   const chooseEvent = useCallback((choiceId: string) => {
     const rewardCards: Card[] = [];
@@ -588,13 +575,13 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       for (const effect of choice.effects) {
         if (effect.type === 'gold') {
           nextState.gold = Math.max(0, nextState.gold + (effect.value || 0));
-        } else if (effect.type === 'hp') {
-          nextState.teamHp = Math.max(0, Math.min(nextState.maxTeamHp, nextState.teamHp + (effect.value || 0)));
         } else if (effect.type === 'card' && effect.cardId) {
           const card = getCardById(effect.cardId);
           if (card) {
             rewardCards.push(card);
           }
+        } else if (effect.type === 'hp') {
+          // 팀 HP 개념은 루트 난이도 규칙에서 제거되어 HP 이벤트는 미반영합니다.
         } else if (effect.type === 'relic' && effect.relicId) {
           const relicId = effect.relicId;
           if (runHasRelic(nextState.relics, relicId)) continue;
@@ -628,8 +615,8 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     rewardCards.forEach((card) => addRunCards([card]));
   }, [addRunCards]);
 
-  const acknowledgeReward = useCallback(() => {
-    let nextRoute = '/roguelike/map';
+  const acknowledgeReward = useCallback((nextRouteOverride?: string) => {
+    let nextRoute = nextRouteOverride || '/roguelike/map';
     setState((prev) => {
       const next = { ...prev, pendingReward: null };
       if (prev.result === 'loss') return { ...next, phase: 'ended' };
@@ -677,7 +664,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         }
 
         if (item.type === 'restore') {
-          next.teamHp = Math.min(next.maxTeamHp, next.teamHp + 30);
+          // 팀 HP 회복 효과는 탐험 내 전멸 패배 규칙 전환으로 비활성화합니다.
           success = true;
           return next;
         }
@@ -715,17 +702,15 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     [addRunCards]
   );
 
-  const healByRest = useCallback((amount?: number) => {
-    const heal = amount ?? Math.floor(state.maxTeamHp * 0.3);
+  const healByRest = useCallback(() => {
     let success = false;
     setState((prev) => {
       if (prev.phase !== 'rest') return prev;
-      if (prev.teamHp >= prev.maxTeamHp) return prev;
       success = true;
-      return { ...prev, teamHp: Math.min(prev.maxTeamHp, prev.teamHp + heal), phase: 'running' };
+      return { ...prev, phase: 'running' };
     });
     return success;
-  }, [state.maxTeamHp]);
+  }, []);
 
   const upgradeWarriorInRun = useCallback((instanceId: string) => {
     let success = false;

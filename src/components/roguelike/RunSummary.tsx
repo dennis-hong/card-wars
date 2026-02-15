@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card, Deck, MAX_LEVEL, OwnedCard } from '@/types/game';
 import { getCardById } from '@/data/cards';
@@ -9,8 +9,6 @@ import RelicDisplay from '@/components/roguelike/RelicDisplay';
 interface Props {
   runResult: 'win' | 'loss' | 'draw';
   act: number;
-  teamHp: number;
-  maxTeamHp: number;
   startedAt: number;
   relicIds: string[];
   deck: Deck;
@@ -50,8 +48,6 @@ function cardLabel(type: Card['type']) {
 export default function RunSummary({
   runResult,
   act,
-  teamHp,
-  maxTeamHp,
   startedAt,
   relicIds,
   deck,
@@ -74,7 +70,17 @@ export default function RunSummary({
     return [...warriors, ...tactics];
   }, [deck.tactics, deck.warriors, inventory]);
 
-  const elapsed = Date.now() - Math.max(0, startedAt);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const elapsed = now - Math.max(0, startedAt);
 
   return (
     <div className="min-h-screen ui-page p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] text-white">
@@ -106,10 +112,6 @@ export default function RunSummary({
             <div className="rounded-lg border border-white/10 bg-black/25 p-2">
               <div className="text-gray-300 text-xs">수집 보물</div>
               <div className="font-bold text-amber-300">{stats.relicsCollected}</div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-black/25 p-2">
-              <div className="text-gray-300 text-xs">최종 체력</div>
-              <div className="font-bold text-rose-300">{teamHp}/{maxTeamHp}</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/25 p-2">
               <div className="text-gray-300 text-xs">획득 카드</div>

@@ -20,6 +20,7 @@ type DeckSlice = Pick<GameStateHook, 'saveDeck' | 'deleteDeck' | 'setActiveDeck'
 };
 type BattleSlice = Pick<GameStateHook, 'recordBattleResult'> & {
   addBoosterPack: (type: BoosterPack['type']) => void;
+  recordScenarioClear: () => void;
 };
 
 const GameStateCoreContext = createContext<CoreSlice | null>(null);
@@ -65,6 +66,7 @@ function buildBattleSlice(state: GameStateHook): BattleSlice {
   return {
     recordBattleResult: state.recordBattleResult,
     addBoosterPack: state.addBoosterPack,
+    recordScenarioClear: state.recordScenarioClear,
   };
 }
 
@@ -72,25 +74,22 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
   const state = useGameState();
 
   const core = useMemo(() => buildCoreSlice(state), [
-    state.state,
-    state.loaded,
-    state.newTitleIds,
-    state.enhanceableCount,
+    state,
   ]);
 
   const owned = useMemo(
     () => buildOwnedCardsSlice(state),
-    [state.state.ownedCards, state.addCards, state.openBooster, state.enhanceCard, state.mergeCards]
+    [state],
   );
 
   const decks = useMemo(
     () => buildDeckSlice(state),
-    [state.state.decks, state.state.activeDeckId, state.saveDeck, state.deleteDeck, state.setActiveDeck]
+    [state],
   );
 
   const battle = useMemo(
     () => buildBattleSlice(state),
-    [state.recordBattleResult, state.addBoosterPack]
+    [state],
   );
 
   if (!state.loaded) {
@@ -175,6 +174,7 @@ export function useGameStateContext() {
       setActiveDeck: deck.setActiveDeck,
       recordBattleResult: battle.recordBattleResult,
       addBoosterPack: battle.addBoosterPack,
+      recordScenarioClear: battle.recordScenarioClear,
     }),
     [core, deck, owned, battle]
   );

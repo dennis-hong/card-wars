@@ -57,7 +57,11 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
       </div>
 
       {/* Portrait */}
-      <div className="relative mx-2 mt-1 rounded overflow-hidden bg-black/30 flex items-center justify-center aspect-square">
+      <div
+        className={`relative mx-2 mt-1 rounded overflow-hidden bg-black/30 flex items-center justify-center ${
+          size === 'sm' ? 'h-[58px]' : size === 'md' ? 'h-[88px]' : 'h-[164px]'
+        }`}
+      >
         {portraitSrc && !imgError ? (
           <Image
             src={portraitSrc}

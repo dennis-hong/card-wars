@@ -1,6 +1,18 @@
 import { Card } from '@/types/game';
 import { WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
 import { getRelicList } from '@/lib/roguelike/relics';
+import { DeterministicRandom } from '@/lib/rng';
+
+const DEFAULT_RANDOM: DeterministicRandom = { next: Math.random };
+
+function shuffleByRandom<T>(items: readonly T[], random: DeterministicRandom): T[] {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(random.next() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
 
 export type ShopItemType = 'card' | 'relic' | 'restore' | 'remove';
 
@@ -13,10 +25,10 @@ export interface ShopItem {
   relicId?: string;
 }
 
-export function buildShopInventory(): ShopItem[] {
-  const warriors = WARRIOR_CARDS.slice().sort(() => Math.random() - 0.5).slice(0, 3);
-  const tactics = TACTIC_CARDS.slice().sort(() => Math.random() - 0.5).slice(0, 2);
-  const relics = getRelicList().sort(() => Math.random() - 0.5).slice(0, 1);
+export function buildShopInventory(random: DeterministicRandom = DEFAULT_RANDOM): ShopItem[] {
+  const warriors = shuffleByRandom(WARRIOR_CARDS, random).slice(0, 3);
+  const tactics = shuffleByRandom(TACTIC_CARDS, random).slice(0, 2);
+  const relics = shuffleByRandom(getRelicList(), random).slice(0, 1);
 
   const items: ShopItem[] = [];
 

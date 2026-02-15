@@ -215,6 +215,7 @@ export type BattleAction =
 export interface BattleState {
   turn: number;
   maxTurns: number;
+  stalemateTurns: number;
   phase: BattlePhase;
   player: {
     warriors: BattleWarrior[];
@@ -246,7 +247,7 @@ export interface Title {
   id: string;
   name: string;
   description: string;
-  category: 'wins' | 'collection' | 'streak';
+  category: 'wins' | 'collection' | 'streak' | 'roguelike';
   condition: (stats: GameState['stats'], collectionRate: number) => boolean;
 }
 

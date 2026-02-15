@@ -1,5 +1,6 @@
 import { Card, Grade, PackType, PACK_INFO } from '@/types/game';
 import { WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
+import { DeterministicRandom, randomInt, randomPick } from '@/lib/rng';
 
 const ALL_GACHA_CARDS: Card[] = [...WARRIOR_CARDS, ...TACTIC_CARDS];
 
@@ -7,8 +8,8 @@ function getCardsByGrade(grade: Grade): Card[] {
   return ALL_GACHA_CARDS.filter((c) => c.grade === grade);
 }
 
-function rollGrade(packType: PackType): Grade {
-  const r = Math.random() * 100;
+function rollGrade(packType: PackType, random: DeterministicRandom): Grade {
+  const r = random.next() * 100;
   switch (packType) {
     case 'normal':
       if (r < 1) return 4;
@@ -31,34 +32,36 @@ function rollGrade(packType: PackType): Grade {
       if (r < 80) return 2;
       return 1;
   }
+  return 1;
 }
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+function createRandomSource(random?: DeterministicRandom): DeterministicRandom {
+  return random ?? { next: Math.random };
 }
 
-export function openPack(packType: PackType): Card[] {
+export function openPack(packType: PackType, random?: DeterministicRandom): Card[] {
+  const rng = createRandomSource(random);
   const info = PACK_INFO[packType];
   const cards: Card[] = [];
 
   // guaranteed card
   const guaranteedCards = getCardsByGrade(info.guaranteed);
   if (guaranteedCards.length > 0) {
-    cards.push(pickRandom(guaranteedCards));
+    cards.push(randomPick(guaranteedCards, rng));
   }
 
   // remaining
   while (cards.length < info.cardCount) {
-    const grade = rollGrade(packType);
+    const grade = rollGrade(packType, rng);
     const pool = getCardsByGrade(grade);
     if (pool.length > 0) {
-      cards.push(pickRandom(pool));
+      cards.push(randomPick(pool, rng));
     }
   }
 
   // shuffle
   for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(i + 1, rng);
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
 

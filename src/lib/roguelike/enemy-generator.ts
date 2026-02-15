@@ -2,6 +2,9 @@ import { randomInt } from '@/lib/rng';
 import { WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
 import { Lane } from '@/types/game';
 import { RunAct, RunEnemyTemplate } from '@/lib/roguelike/run-types';
+import { DeterministicRandom } from '@/lib/rng';
+
+const DEFAULT_RANDOM: DeterministicRandom = { next: Math.random };
 
 const LANES: Lane[] = ['front', 'mid', 'back'];
 
@@ -13,16 +16,16 @@ function buildPools(): { normal: string[]; elite: string[]; boss: string[] } {
   };
 }
 
-function pickOne(pool: string[]): string {
+function pickOne(pool: string[], random: DeterministicRandom): string {
   if (pool.length === 0) return '';
-  return pool[randomInt(pool.length, { next: Math.random })];
+  return pool[randomInt(pool.length, random)];
 }
 
-function pickMany(pool: string[], count: number): string[] {
+function pickMany(pool: string[], count: number, random: DeterministicRandom): string[] {
   const source = [...pool];
   const picked: string[] = [];
   while (source.length > 0 && picked.length < count) {
-    const idx = randomInt(source.length, { next: Math.random });
+    const idx = randomInt(source.length, random);
     picked.push(source[idx]);
     source.splice(idx, 1);
   }
@@ -34,6 +37,7 @@ function buildTemplate(
   tacticCount: number,
   levelBase: number,
   packReward: 'normal' | 'rare' | 'hero' | 'legend',
+  random: DeterministicRandom,
 ): RunEnemyTemplate {
   const levelShift = Math.max(1, levelBase);
   const templateWarriors: RunEnemyTemplate['warriors'] = [];
@@ -43,13 +47,13 @@ function buildTemplate(
     templateWarriors.push({
       cardId: warriors[i],
       lane,
-      level: Math.max(1, levelShift + randomInt(2, { next: Math.random })),
+      level: Math.max(1, levelShift + randomInt(2, random)),
     });
   }
 
-  const tacticCards = pickMany(TACTIC_CARDS.map((c) => c.id), tacticCount)
+  const tacticCards = pickMany(TACTIC_CARDS.map((c) => c.id), tacticCount, random)
     .filter((cardId) => cardId)
-    .map((cardId) => ({ cardId, level: Math.max(1, levelShift + randomInt(3, { next: Math.random })) }));
+    .map((cardId) => ({ cardId, level: Math.max(1, levelShift + randomInt(3, random)) }));
 
   return {
     warriors: templateWarriors,
@@ -71,15 +75,17 @@ function scaleGold(baseMin: number, baseMax: number, act: RunAct): { min: number
 export function getEnemyTemplate(
   act: RunAct,
   nodeType: 'battle' | 'elite' | 'boss',
+  random?: DeterministicRandom,
 ): RunEnemyTemplate {
+  const rng = random ?? DEFAULT_RANDOM;
   const { normal, elite, boss } = buildPools();
 
   if (nodeType === 'elite') {
     if (act === 1) {
-      const warriors = [pickOne(elite), ...pickMany(normal, 2)].filter(Boolean);
+      const warriors = [pickOne(elite, rng), ...pickMany(normal, 2, rng)].filter(Boolean);
       const gold = scaleGold(30, 50, act);
       return {
-        ...buildTemplate(warriors, 2, act + 1, 'rare'),
+        ...buildTemplate(warriors, 2, act + 1, 'rare', rng),
         rewardGoldMin: gold.min,
         rewardGoldMax: gold.max,
         relicChoices: ['green-dragon-blade', 'rattan-armor', 'art-of-war'],
@@ -87,20 +93,20 @@ export function getEnemyTemplate(
     }
 
     if (act === 2) {
-      const warriors = [pickOne(elite), pickOne(normal), pickOne(normal)].filter(Boolean);
+      const warriors = [pickOne(elite, rng), pickOne(normal, rng), pickOne(normal, rng)].filter(Boolean);
       const gold = scaleGold(30, 50, act);
       return {
-        ...buildTemplate(warriors, 2, act + 2, 'hero'),
+        ...buildTemplate(warriors, 2, act + 2, 'hero', rng),
         rewardGoldMin: gold.min,
         rewardGoldMax: gold.max,
         relicChoices: ['sky-piercer', 'yitian-sword', 'di-lu'],
       };
     }
 
-    const warriors = [pickOne(elite), pickOne(elite), pickOne(normal)].filter(Boolean);
+    const warriors = [pickOne(elite, rng), pickOne(elite, rng), pickOne(normal, rng)].filter(Boolean);
     const gold = scaleGold(30, 50, act);
     return {
-      ...buildTemplate(warriors, 2, act + 3, 'hero'),
+        ...buildTemplate(warriors, 2, act + 3, 'hero', rng),
       rewardGoldMin: gold.min,
       rewardGoldMax: gold.max,
       relicChoices: ['emperor-crown', 'taiping-scroll', 'imperial-seal'],
@@ -109,10 +115,10 @@ export function getEnemyTemplate(
 
   if (nodeType === 'boss') {
     if (act === 1) {
-      const warriors = ['w-lu-bu', pickOne(normal), pickOne(normal)].filter(Boolean);
+      const warriors = ['w-lu-bu', pickOne(normal, rng), pickOne(normal, rng)].filter(Boolean);
       const gold = scaleGold(50, 100, act);
       return {
-        ...buildTemplate(warriors, 2, act + 2, 'hero'),
+        ...buildTemplate(warriors, 2, act + 2, 'hero', rng),
         rewardGoldMin: gold.min,
         rewardGoldMax: gold.max,
         relicChoices: ['emperor-crown'],
@@ -120,20 +126,20 @@ export function getEnemyTemplate(
     }
 
     if (act === 2) {
-      const warriors = ['w-dong-zhuo', pickOne(elite), pickOne(normal)].filter(Boolean);
+      const warriors = ['w-dong-zhuo', pickOne(elite, rng), pickOne(normal, rng)].filter(Boolean);
       const gold = scaleGold(50, 100, act);
       return {
-        ...buildTemplate(warriors, 2, act + 2, 'hero'),
+        ...buildTemplate(warriors, 2, act + 2, 'hero', rng),
         rewardGoldMin: gold.min,
         rewardGoldMax: gold.max,
         relicChoices: ['imperial-seal'],
       };
     }
 
-    const act3Boss = [pickOne(boss), pickOne(boss), pickOne(boss)].filter(Boolean);
+    const act3Boss = [pickOne(boss, rng), pickOne(boss, rng), pickOne(boss, rng)].filter(Boolean);
     const gold = scaleGold(50, 100, act);
     return {
-      ...buildTemplate(act3Boss, 2, act + 3, 'legend'),
+        ...buildTemplate(act3Boss, 2, act + 3, 'legend', rng),
       rewardGoldMin: gold.min,
       rewardGoldMax: gold.max,
       relicChoices: ['art-of-war', 'taiping-scroll', 'imperial-seal'],
@@ -142,7 +148,7 @@ export function getEnemyTemplate(
 
   if (act === 1) {
     return {
-      ...buildTemplate(pickMany(normal, 3), 2, act + 1, 'normal'),
+      ...buildTemplate(pickMany(normal, 3, rng), 2, act + 1, 'normal', rng),
       rewardGoldMin: 15,
       rewardGoldMax: 25,
       relicChoices: [],
@@ -150,18 +156,18 @@ export function getEnemyTemplate(
   }
 
   if (act === 2) {
-    const warriors = [...pickMany(normal, 2), pickOne(elite)].filter(Boolean);
+    const warriors = [...pickMany(normal, 2, rng), pickOne(elite, rng)].filter(Boolean);
     return {
-      ...buildTemplate(warriors, 2, act + 1, 'normal'),
+      ...buildTemplate(warriors, 2, act + 1, 'normal', rng),
       rewardGoldMin: 15,
       rewardGoldMax: 25,
       relicChoices: [],
     };
   }
 
-  const warriors = [...pickMany(normal, 1), ...pickMany(elite, 2)].filter(Boolean);
+  const warriors = [...pickMany(normal, 1, rng), ...pickMany(elite, 2, rng)].filter(Boolean);
   return {
-    ...buildTemplate(warriors, 2, act + 2, 'rare'),
+      ...buildTemplate(warriors, 2, act + 2, 'rare', rng),
     rewardGoldMin: 18,
     rewardGoldMax: 30,
     relicChoices: [],

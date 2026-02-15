@@ -6,9 +6,6 @@ import RelicDisplay from '@/components/roguelike/RelicDisplay';
 
 export default function RunHeader() {
   const { state } = useRunContext();
-  const hpPercent = state.maxTeamHp <= 0 ? 0 : Math.round((state.teamHp / state.maxTeamHp) * 100);
-  const hpColor =
-    hpPercent <= 25 ? 'from-red-700 to-red-900' : hpPercent <= 50 ? 'from-amber-700 to-amber-900' : 'from-green-700 to-emerald-900';
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-gray-950/95 backdrop-blur">
@@ -20,6 +17,18 @@ export default function RunHeader() {
             <span>경로 {state.currentNodeId ? state.currentNodeId : '미정'}</span>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/collection"
+              className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-xs text-gray-200 hover:text-white"
+            >
+              카드 도감
+            </Link>
+            <Link
+              href="/roguelike?mode=manual"
+              className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-xs text-gray-200 hover:text-white"
+            >
+              덱 편집
+            </Link>
             <Link
               href="/"
               className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-xs text-gray-200 hover:text-white"
@@ -35,21 +44,7 @@ export default function RunHeader() {
           </div>
         </div>
         <div className="mt-2">
-          <div className="mb-1 flex items-center justify-between text-xs text-gray-300">
-            <span>❤️ 체력</span>
-            <span>
-              {state.teamHp}/{state.maxTeamHp}
-            </span>
-          </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className={`h-full rounded-full bg-gradient-to-r ${hpColor} transition-all`}
-              style={{ width: `${hpPercent}%` }}
-            />
-          </div>
-          <div className="mt-2">
-            <RelicDisplay relicIds={state.relics} size="sm" />
-          </div>
+          <RelicDisplay relicIds={state.relics} size="sm" />
         </div>
       </div>
     </header>

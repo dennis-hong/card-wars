@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Deck, Lane, OwnedCard, WarriorCard, TacticCard } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
+import CardDetailModal from '@/components/card/CardDetailModal';
 
 interface Props {
   deck: Deck;
   inventory: OwnedCard[];
   onSave: (nextDeck: Deck) => void;
+  actionLabel?: string;
 }
 
 type DeckSlot = { instanceId: string; lane: Lane } | null;
@@ -40,18 +42,19 @@ function getTacticCards(inventory: OwnedCard[]) {
   });
 }
 
-export default function DeckFormation({ deck, inventory, onSave }: Props) {
-  const [warriorSlots, setWarriorSlots] = useState<DeckSlot[]>([null, null, null]);
-  const [tacticSlots, setTacticSlots] = useState<string[]>([]);
-
-  useEffect(() => {
-    setWarriorSlots([
-      deck.warriors[0] ? { instanceId: deck.warriors[0].instanceId, lane: deck.warriors[0].lane } : null,
-      deck.warriors[1] ? { instanceId: deck.warriors[1].instanceId, lane: deck.warriors[1].lane } : null,
-      deck.warriors[2] ? { instanceId: deck.warriors[2].instanceId, lane: deck.warriors[2].lane } : null,
-    ]);
-    setTacticSlots([...deck.tactics]);
-  }, [deck]);
+export default function DeckFormation({
+  deck,
+  inventory,
+  onSave,
+  actionLabel,
+}: Props) {
+  const [warriorSlots, setWarriorSlots] = useState<DeckSlot[]>(() => [
+    deck.warriors[0] ? { instanceId: deck.warriors[0].instanceId, lane: deck.warriors[0].lane } : null,
+    deck.warriors[1] ? { instanceId: deck.warriors[1].instanceId, lane: deck.warriors[1].lane } : null,
+    deck.warriors[2] ? { instanceId: deck.warriors[2].instanceId, lane: deck.warriors[2].lane } : null,
+  ]);
+  const [tacticSlots, setTacticSlots] = useState<string[]>(() => [...deck.tactics]);
+  const [detailTarget, setDetailTarget] = useState<{ owned: OwnedCard; card: WarriorCard | TacticCard } | null>(null);
 
   const availableWarriors = useMemo(() => getWarriorCards(inventory), [inventory]);
   const availableTactics = useMemo(() => getTacticCards(inventory), [inventory]);
@@ -159,6 +162,7 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
                   owned={warrior.owned}
                   size="sm"
                   selected={false}
+                  onClick={() => setDetailTarget({ owned: warrior.owned, card: warrior.card })}
                 />
                 <div className="text-center text-[11px] text-amber-300 font-bold">{LANES[slot.lane]}</div>
               </div>
@@ -173,17 +177,23 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
           <div className="text-white text-xs mb-2">
             전법: {selectedTacticCards.length} / 2
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="flex justify-center">
             {selectedTacticCards.length === 0 && <div className="text-gray-400 text-xs">전법 미선택</div>}
-            {selectedTacticCards.map(({ owned, card }) => (
-              <TacticCardView
-                key={`summary-${owned.instanceId}`}
-                card={card}
-                owned={owned}
-                size="sm"
-                selected={false}
-              />
-            ))}
+            {selectedTacticCards.length > 0 && (
+              <div className="grid w-fit grid-cols-2 gap-3">
+                {selectedTacticCards.map(({ owned, card }) => (
+                  <div key={`summary-${owned.instanceId}`} className="flex justify-center">
+                    <TacticCardView
+                      card={card}
+                      owned={owned}
+                      size="sm"
+                      selected={false}
+                      onClick={() => setDetailTarget({ owned, card })}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -204,6 +214,13 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
                   duplicateCount={owned.duplicates}
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setDetailTarget({ owned, card })}
+                className="w-full rounded-md border border-white/15 bg-white/5 py-1 text-[11px] font-bold text-white/85"
+              >
+                상세
+              </button>
             </div>
           ))}
         </div>
@@ -225,6 +242,13 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
                   onClick={() => toggleTactic(owned.instanceId)}
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setDetailTarget({ owned, card })}
+                className="w-full rounded-md border border-white/15 bg-white/5 py-1 text-[11px] font-bold text-white/85"
+              >
+                상세
+              </button>
             </div>
           ))}
         </div>
@@ -244,11 +268,18 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
             : 'ui-btn ui-btn-primary'
         }`}
       >
-        덱 확정 후 맵 진입
+        {actionLabel ?? '덱 확정 후 맵 진입'}
       </button>
 
       {!warriorReady && <p className="text-xs text-yellow-300">무장 3장을 선택해야 합니다.</p>}
       <p className="text-xs text-gray-400">전법은 선택 사항입니다. (최대 2장)</p>
+
+      <CardDetailModal
+        card={detailTarget?.card ?? null}
+        owned={detailTarget?.owned ?? null}
+        sourceTag="탐험 편성"
+        onClose={() => setDetailTarget(null)}
+      />
     </div>
   );
 }

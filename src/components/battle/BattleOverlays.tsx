@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { getWarriorById } from '@/data/cards';
 import { TACTIC_IMAGES } from '@/lib/tactic-images';
 import { BattleState } from '@/types/game';
+import { useEffect, useState } from 'react';
 
 interface LiveLogEntry {
   id: number;
@@ -208,12 +209,21 @@ function UltimateOverlay({ showUltimate }: { showUltimate: { cardId: string; ski
 }
 
 function LiveLogPanel({ liveLog }: { liveLog: LiveLogEntry[] }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
   if (liveLog.length === 0) return null;
 
   return (
     <div className="fixed top-20 right-3 sm:right-4 z-30 pointer-events-none space-y-1 w-[58vw] sm:w-[320px] max-w-[320px]">
       {liveLog.map((entry) => {
-        const age = Date.now() - entry.timestamp;
+        const age = now - entry.timestamp;
         const isFading = age > 3800;
         return (
           <div

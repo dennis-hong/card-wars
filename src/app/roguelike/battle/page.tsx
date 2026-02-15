@@ -50,10 +50,8 @@ export default function RoguelikeBattlePage() {
           level: Math.max(1, tactic.level),
         })),
       },
-      teamHp: state.teamHp,
-      maxTeamHp: state.maxTeamHp,
     };
-  }, [currentNode, state.maxTeamHp, state.teamHp]);
+  }, [currentNode]);
 
   const hasEnoughWarriors = useMemo(() => {
     const owned = new Set(state.inventory.map((owned) => owned.instanceId));
@@ -109,15 +107,10 @@ export default function RoguelikeBattlePage() {
             router.push('/roguelike/summary');
           }
         }}
-        onBattleEndWithSummary={(result, summary) => {
-          completeBattle(result, {
-            teamHpBefore: state.teamHp,
-            teamHpAfter: summary.teamHpAfter,
-            teamDamage: summary.teamDamage,
-          });
+        onBattleEndWithSummary={(result) => {
+          completeBattle(result);
         }}
         battleOptions={battleOptions}
-        runTeamHp={state.teamHp}
         onExit={() => router.push('/roguelike/map')}
       />
     </div>
