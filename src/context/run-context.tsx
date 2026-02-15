@@ -1,4 +1,4 @@
-`use client`;
+'use client';
 
 import { createContext, ReactNode, useCallback, useContext, useMemo } from 'react';
 import { useState, useEffect } from 'react';

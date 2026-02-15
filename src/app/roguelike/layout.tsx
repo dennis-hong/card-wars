@@ -1,11 +1,9 @@
-'use client';
+import type { ReactNode } from 'react';
 
-import { RunContextProvider } from '@/context/run-context';
+type RoguelikeLayoutProps = {
+  children: ReactNode;
+};
 
-export default function RoguelikeLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return <RunContextProvider>{children}</RunContextProvider>;
+export default function RoguelikeLayout({ children }: RoguelikeLayoutProps) {
+  return <>{children}</>;
 }

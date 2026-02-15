@@ -1,25 +1,30 @@
-import type { Metadata, Viewport } from "next";
-import "./globals.css";
+import type { Metadata, Viewport } from 'next';
+import type { ReactNode } from 'react';
+import './globals.css';
 import { GameStateProvider } from '@/context/GameStateContext';
+import { RunContextProvider } from '@/context/run-context';
+import BottomTabBar from '@/components/shell/BottomTabBar';
 import GameToasts from '@/components/shell/GameToasts';
 
 export const metadata: Metadata = {
-  title: "Warlords: Card Wars",
-  description: "5분 컷 삼국지 카드 배틀",
+  title: 'Warlords: Card Wars',
+  description: '5분 컷 삼국지 카드 배틀',
 };
 
 export const viewport: Viewport = {
-  width: "device-width",
+  width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
 };
 
+type RootLayoutProps = {
+  children: ReactNode;
+};
+
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: RootLayoutProps) {
   return (
     <html lang="ko">
       <head>
@@ -33,20 +38,23 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <GameStateProvider>
-          <GameToasts>
-            {children}
-          </GameToasts>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
+          <RunContextProvider>
+            <GameToasts>
+              {children}
+              <BottomTabBar />
+              <script
+                dangerouslySetInnerHTML={{
+                  __html: `
                 if ('serviceWorker' in navigator) {
                   window.addEventListener('load', () => {
                     navigator.serviceWorker.register('/sw.js').catch(() => {});
                   });
                 }
               `,
-            }}
-          />
+                }}
+              />
+            </GameToasts>
+          </RunContextProvider>
         </GameStateProvider>
       </body>
     </html>
