@@ -101,7 +101,7 @@ export default function RoguelikeLandingPage() {
       <div className="mx-auto max-w-3xl px-3 py-4 space-y-4">
         <div className="rounded-2xl border border-white/15 bg-black/35 p-4 animate-[fadeIn_260ms_ease]">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-lg md:text-xl font-black text-white">원정 모드</h1>
+            <h1 className="text-lg md:text-xl font-black text-white">탐험 모드</h1>
             <span className="text-xs text-gray-300">{phaseHint}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">

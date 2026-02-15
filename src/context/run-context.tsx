@@ -119,7 +119,7 @@ function getDeckSummary(deck: Deck) {
   return {
     ready: deck.warriors.length === 3 && uniqueLanes.size === 3 && deck.tactics.length >= 1,
     hasThreeWarriors: deck.warriors.length >= 3,
-    hasTwoTactics: deck.tactics.length >= 2,
+    hasTwoTactics: true, // 전법 없어도 진행 가능
   };
 }
 

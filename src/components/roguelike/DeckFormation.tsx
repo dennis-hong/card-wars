@@ -60,7 +60,7 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
   const selectedTacticIds = useMemo(() => [...tacticSlots], [tacticSlots]);
 
   const warriorReady = selectedWarriorIds.length === 3;
-  const tacticReady = selectedTacticIds.length >= 2;
+  const tacticReady = true; // 전법 없어도 진행 가능
 
   const nextDeck = useMemo(() => {
     const warriors: { instanceId: string; lane: Lane }[] = [];
@@ -247,8 +247,8 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
         덱 확정 후 맵 진입
       </button>
 
-      {!warriorReady && <p className="text-xs text-yellow-300">무장 3장, 전법 2장을 모두 선택해야 합니다.</p>}
-      {!tacticReady && <p className="text-xs text-yellow-300">전법 2장까지 선택 가능합니다.</p>}
+      {!warriorReady && <p className="text-xs text-yellow-300">무장 3장을 선택해야 합니다.</p>}
+      <p className="text-xs text-gray-400">전법은 선택 사항입니다. (최대 2장)</p>
     </div>
   );
 }

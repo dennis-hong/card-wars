@@ -131,17 +131,17 @@ export default function Home() {
           )}
 
           <button
-            onClick={() => navigate('/battle')}
+            onClick={() => navigate('/roguelike')}
             className="ui-btn ui-btn-danger w-full py-4 min-h-14 text-lg border border-red-500/30"
           >
-            ⚔️ AI 대전
+            🗺️ 탐험 시작
           </button>
 
           <button
-            onClick={() => navigate('/roguelike')}
-            className="ui-btn ui-btn-primary w-full py-4 min-h-14 text-lg border border-red-500/20"
+            onClick={() => navigate('/battle')}
+            className="ui-btn ui-btn-neutral w-full py-3 min-h-12 border border-white/10"
           >
-            🗺️ 원정 모드
+            ⚔️ 연습 대전
           </button>
 
           <button
