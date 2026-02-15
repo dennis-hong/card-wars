@@ -8,6 +8,18 @@ export type CombatMathFn = (value: number) => number;
 
 export interface BattleEngineOptions {
   random?: BattleRandom;
+  forcedEnemy?: {
+    warriors: { cardId: string; level: number; lane: 'front' | 'mid' | 'back' }[];
+    tactics?: { cardId: string; level: number }[];
+  };
+  playerRelics?: string[];
+  enemyRelics?: string[];
+  teamHp?: number;
+  maxTeamHp?: number;
+  runRelics?: {
+    player: string[];
+    enemy: string[];
+  };
 }
 
 export interface BattleTurnResult {

@@ -232,6 +232,10 @@ export interface BattleState {
   combatEvents: CombatEvent[];
   activeSynergies?: (BattleSynergy & { side: 'player' | 'enemy' })[];
   ultimateTriggered?: { cardId: string; skillName: string } | null;
+  runRelics?: {
+    player: string[];
+    enemy: string[];
+  };
 }
 
 // ============================================================
