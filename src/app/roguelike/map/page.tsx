@@ -17,6 +17,7 @@ export default function RoguelikeMapPage() {
   const router = useRouter();
   const {
     state,
+    loaded,
     getCurrentNodeReachable,
     selectNode,
     goHome,
@@ -24,6 +25,14 @@ export default function RoguelikeMapPage() {
 
   const reachable = useMemo(() => getCurrentNodeReachable(), [getCurrentNodeReachable]);
   const actTitle = ACT_TITLES[state.currentAct] ?? '황건토벌';
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
+        <div className="text-gray-400">로딩 중...</div>
+      </div>
+    );
+  }
 
   if (!state.map) {
     return (
