@@ -354,14 +354,30 @@ export function getTacticEffectLines(card: TacticCard, level = 1): string[] {
 
 export const ALL_CARDS = [...WARRIOR_CARDS, ...TACTIC_CARDS];
 
+// Pre-built lookup maps for O(1) access (avoids repeated Array.find)
+const CARD_MAP = new Map(ALL_CARDS.map((c) => [c.id, c]));
+const WARRIOR_MAP = new Map(WARRIOR_CARDS.map((c) => [c.id, c]));
+const TACTIC_MAP = new Map(TACTIC_CARDS.map((c) => [c.id, c]));
+
 export function getCardById(id: string) {
-  return ALL_CARDS.find((c) => c.id === id);
+  return CARD_MAP.get(id);
 }
 
 export function getWarriorById(id: string) {
-  return WARRIOR_CARDS.find((c) => c.id === id);
+  return WARRIOR_MAP.get(id);
 }
 
 export function getTacticById(id: string) {
-  return TACTIC_CARDS.find((c) => c.id === id);
+  return TACTIC_MAP.get(id);
+}
+
+/** Type-safe card resolution with validation. Returns null for unknown IDs. */
+export function resolveCard(id: string): import('@/types/game').Card | null {
+  return CARD_MAP.get(id) ?? null;
+}
+
+/** Resolve owned card to its card data, returning both or null if invalid. */
+export function resolveOwnedCard(owned: import('@/types/game').OwnedCard): { owned: import('@/types/game').OwnedCard; card: import('@/types/game').Card } | null {
+  const card = CARD_MAP.get(owned.cardId);
+  return card ? { owned, card } : null;
 }

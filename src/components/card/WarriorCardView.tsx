@@ -1,25 +1,14 @@
 'use client';
 
-import { WarriorCard, GRADE_LABELS, GRADE_COLORS, FACTION_COLORS, OwnedCard } from '@/types/game';
+import { WarriorCard, GRADE_LABELS, GRADE_COLORS, FACTION_COLORS, BaseCardViewProps, CARD_SIZE_CLASSES } from '@/types/game';
 import Image from 'next/image';
 import { getWarriorImage } from '@/lib/warrior-images';
 import { useState } from 'react';
 
-interface Props {
+interface Props extends BaseCardViewProps {
   card: WarriorCard;
-  owned?: OwnedCard;
-  size?: 'sm' | 'md' | 'lg';
-  onClick?: () => void;
-  selected?: boolean;
   showDetails?: boolean;
-  duplicateCount?: number;
 }
-
-const SIZE_CLASSES = {
-  sm: 'w-24 h-36 text-[10px]',
-  md: 'w-40 h-56 text-sm',
-  lg: 'w-52 h-72 text-base',
-};
 
 export default function WarriorCardView({ card, owned, size = 'md', onClick, selected, showDetails, duplicateCount }: Props) {
   const gradeColor = GRADE_COLORS[card.grade];
@@ -35,7 +24,7 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
       className={`
         relative rounded-lg overflow-hidden cursor-pointer select-none
         transition-all duration-200 active:scale-95
-        ${SIZE_CLASSES[size]}
+        ${CARD_SIZE_CLASSES[size]}
         ${selected ? 'ring-2 ring-yellow-400 scale-105' : 'hover:scale-105'}
         ${isLegend ? 'shadow-[0_0_20px_rgba(255,170,0,0.5)]' : isHero ? 'shadow-[0_0_12px_rgba(170,68,255,0.4)]' : 'shadow-lg'}
       `}

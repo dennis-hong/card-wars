@@ -1,25 +1,14 @@
 'use client';
 
 import Image from 'next/image';
-import { TacticCard, GRADE_COLORS, OwnedCard } from '@/types/game';
+import { TacticCard, GRADE_COLORS, BaseCardViewProps, CARD_SIZE_CLASSES } from '@/types/game';
 import { getTacticEffectLines } from '@/data/cards';
 import { TACTIC_IMAGES } from '@/lib/tactic-images';
 
-interface Props {
+interface Props extends BaseCardViewProps {
   card: TacticCard;
-  owned?: OwnedCard;
-  size?: 'sm' | 'md' | 'lg';
-  onClick?: () => void;
-  selected?: boolean;
   disabled?: boolean;
-  duplicateCount?: number;
 }
-
-const SIZE_CLASSES = {
-  sm: 'w-24 h-36 text-[10px]',
-  md: 'w-40 h-56 text-sm',
-  lg: 'w-52 h-72 text-base',
-};
 
 export default function TacticCardView({ card, owned, size = 'md', onClick, selected, disabled, duplicateCount }: Props) {
   const gradeColor = GRADE_COLORS[card.grade];
@@ -33,7 +22,7 @@ export default function TacticCardView({ card, owned, size = 'md', onClick, sele
       className={`
         relative rounded-lg overflow-hidden select-none
         transition-all duration-200
-        ${SIZE_CLASSES[size]}
+        ${CARD_SIZE_CLASSES[size]}
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}
         ${selected ? 'ring-2 ring-yellow-400 scale-105' : ''}
       `}

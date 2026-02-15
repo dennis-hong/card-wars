@@ -1,15 +1,19 @@
 import { 
   Card,
+  Deck,
   DeckSlot,
   Faction,
+  Grade,
   MAX_LEVEL,
   OwnedCard,
+  WarriorCard,
+  TacticCard,
   BattleSynergy,
   BattleSynergyEffect,
   BattleSynergyTier,
   TacticCardId,
 } from '@/types/game';
-import { getCardById } from '@/data/cards';
+import { getCardById, resolveOwnedCard } from '@/data/cards';
 
 export type SynergyTier = BattleSynergyTier;
 
@@ -174,4 +178,104 @@ export function sortOwnedCardsByType(cards: Card[], order: ('grade' | 'name' | '
     return 0;
   });
   return base;
+}
+
+// ============================================================
+// Deck / Ownership Validation Helpers (#11)
+// ============================================================
+
+export interface DeckValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+/** Validate that all deck references point to valid owned cards */
+export function validateDeck(deck: Deck, ownedCards: readonly OwnedCard[]): DeckValidationResult {
+  const errors: string[] = [];
+  const ownedIds = new Set(ownedCards.map((c) => c.instanceId));
+
+  // Check warrior slots
+  for (const slot of deck.warriors) {
+    if (!ownedIds.has(slot.instanceId)) {
+      errors.push(`무장 슬롯의 카드(${slot.instanceId})를 소유하고 있지 않습니다.`);
+      continue;
+    }
+    const owned = ownedCards.find((c) => c.instanceId === slot.instanceId)!;
+    const card = getCardById(owned.cardId);
+    if (!card) {
+      errors.push(`카드 데이터를 찾을 수 없습니다: ${owned.cardId}`);
+    } else if (card.type !== 'warrior') {
+      errors.push(`${card.name}은(는) 무장 카드가 아닙니다.`);
+    }
+  }
+
+  // Check tactic slots
+  for (const tid of deck.tactics) {
+    if (!ownedIds.has(tid)) {
+      errors.push(`전법 슬롯의 카드(${tid})를 소유하고 있지 않습니다.`);
+      continue;
+    }
+    const owned = ownedCards.find((c) => c.instanceId === tid)!;
+    const card = getCardById(owned.cardId);
+    if (!card) {
+      errors.push(`카드 데이터를 찾을 수 없습니다: ${owned.cardId}`);
+    } else if (card.type !== 'tactic') {
+      errors.push(`${card.name}은(는) 전법 카드가 아닙니다.`);
+    }
+  }
+
+  // Check warrior count
+  if (deck.warriors.length !== 3) {
+    errors.push(`무장은 정확히 3장이어야 합니다. (현재: ${deck.warriors.length})`);
+  }
+
+  // Check tactic count
+  if (deck.tactics.length > 2) {
+    errors.push(`전법은 최대 2장입니다. (현재: ${deck.tactics.length})`);
+  }
+
+  // Check lane uniqueness
+  const lanes = deck.warriors.map((w) => w.lane);
+  if (new Set(lanes).size !== lanes.length) {
+    errors.push('각 무장은 서로 다른 진영에 배치해야 합니다.');
+  }
+
+  // Check duplicate instance usage
+  const allIds = [...deck.warriors.map((w) => w.instanceId), ...deck.tactics];
+  if (new Set(allIds).size !== allIds.length) {
+    errors.push('같은 카드를 중복 배치할 수 없습니다.');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/** Remove stale references from a deck (cards no longer owned) */
+export function sanitizeDeck(deck: Deck, ownedCards: readonly OwnedCard[]): Deck {
+  const ownedIds = new Set(ownedCards.map((c) => c.instanceId));
+  return {
+    ...deck,
+    warriors: deck.warriors.filter((w) => ownedIds.has(w.instanceId)),
+    tactics: deck.tactics.filter((t) => ownedIds.has(t)),
+  };
+}
+
+/** Resolve an owned card to its typed warrior data, or null */
+export function resolveWarrior(owned: OwnedCard): { owned: OwnedCard; card: WarriorCard } | null {
+  const resolved = resolveOwnedCard(owned);
+  if (!resolved || resolved.card.type !== 'warrior') return null;
+  return { owned: resolved.owned, card: resolved.card as WarriorCard };
+}
+
+/** Resolve an owned card to its typed tactic data, or null */
+export function resolveTactic(owned: OwnedCard): { owned: OwnedCard; card: TacticCard } | null {
+  const resolved = resolveOwnedCard(owned);
+  if (!resolved || resolved.card.type !== 'tactic') return null;
+  return { owned: resolved.owned, card: resolved.card as TacticCard };
+}
+
+/** Check if an owned card can reach higher level */
+export function canLevelUp(owned: OwnedCard): boolean {
+  const card = getCardById(owned.cardId);
+  if (!card) return false;
+  return owned.level < MAX_LEVEL[card.grade as Grade];
 }

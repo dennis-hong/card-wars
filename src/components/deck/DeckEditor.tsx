@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { OwnedCard, Deck, DeckSlot, Lane } from '@/types/game';
+import { OwnedCard, Deck, DeckSlot, Lane, CardAction } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
@@ -101,7 +101,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
   const selectedCardData = selectedOwnedCard ? (getCardById(selectedOwnedCard.cardId) ?? null) : null;
   const selectedOwnedCount = selectedOwnedCard ? (cardIdCounts[selectedOwnedCard.cardId] || 0) : 0;
 
-  const detailPrimaryAction = (() => {
+  const detailPrimaryAction: CardAction | undefined = (() => {
     if (!selectedOwnedCard || !selectedCardData) return undefined;
 
     if (selectedCardData.type === 'warrior') {
@@ -113,7 +113,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
             handleRemoveWarrior(selectedOwnedCard.instanceId);
             setSelectedOwnedCard(null);
           },
-          tone: 'danger' as const,
+          tone: 'danger',
           hint: `현재 무장 ${warriors.length}/3`,
         };
       }
@@ -123,7 +123,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
           label: '무장 슬롯 가득',
           onClick: () => {},
           disabled: true,
-          tone: 'neutral' as const,
+          tone: 'neutral',
           hint: '먼저 기존 무장을 제거해주세요.',
         };
       }
@@ -137,7 +137,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
           label: '배치 불가',
           onClick: () => {},
           disabled: true,
-          tone: 'neutral' as const,
+          tone: 'neutral',
           hint: '배치 가능한 진영이 없습니다.',
         };
       }
@@ -148,7 +148,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
           handleAddWarrior(selectedOwnedCard.instanceId);
           setSelectedOwnedCard(null);
         },
-        tone: 'primary' as const,
+        tone: 'primary',
         hint: `현재 선택 진영: ${laneToLabel(selectedLane)}`,
       };
     }
@@ -161,7 +161,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
           handleRemoveTactic(selectedOwnedCard.instanceId);
           setSelectedOwnedCard(null);
         },
-        tone: 'danger' as const,
+        tone: 'danger',
         hint: `현재 전법 ${tactics.length}/2`,
       };
     }
@@ -171,7 +171,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
         label: '전법 슬롯 가득',
         onClick: () => {},
         disabled: true,
-        tone: 'neutral' as const,
+        tone: 'neutral',
         hint: '먼저 기존 전법을 제거해주세요.',
       };
     }
@@ -182,7 +182,7 @@ export default function DeckEditor({ ownedCards, deck, onSave, onCancel }: Props
         handleAddTactic(selectedOwnedCard.instanceId);
         setSelectedOwnedCard(null);
       },
-      tone: 'primary' as const,
+      tone: 'primary',
       hint: `현재 전법 ${tactics.length}/2`,
     };
   })();

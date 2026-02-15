@@ -7,6 +7,7 @@ import { TITLES } from '@/data/titles';
 import { generateId } from '@/lib/uuid';
 import { openPack } from '@/lib/gacha';
 import { createInitialState, loadState, saveState } from '@/lib/storage';
+import { sanitizeDeck, canLevelUp } from '@/lib/card-utils';
 
 // Remove stale deck references when a card is removed from ownedCards
 function cleanDecksAfterRemoval(decks: Deck[], removedInstanceId: string): Deck[] {
@@ -153,11 +154,7 @@ export function useGameState() {
     let success = false;
     updateState((prev) => {
       const card = prev.ownedCards.find((c) => c.instanceId === instanceId);
-      if (!card) return prev;
-      const cardData = getCardById(card.cardId);
-      if (!cardData) return prev;
-      const maxLvl = MAX_LEVEL[cardData.grade as Grade];
-      if (card.level >= maxLvl) return prev;
+      if (!card || !canLevelUp(card)) return prev;
 
       // If no duplicates stored, auto-merge from another owned copy
       if (card.duplicates < 1) {
@@ -254,10 +251,7 @@ export function useGameState() {
     for (const c of state.ownedCards) {
       if (seen.has(c.cardId)) continue;
       seen.add(c.cardId);
-      const cardData = getCardById(c.cardId);
-      if (!cardData) continue;
-      const maxLvl = MAX_LEVEL[cardData.grade as Grade];
-      if (c.level >= maxLvl) continue;
+      if (!canLevelUp(c)) continue;
       const totalDupes = c.duplicates + (cardIdCounts[c.cardId] - 1);
       if (totalDupes > 0) count++;
     }

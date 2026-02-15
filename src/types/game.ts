@@ -313,3 +313,35 @@ export const MAX_LEVEL: Record<Grade, number> = {
   3: 20,
   4: 30,
 };
+
+// ============================================================
+// Shared Component Prop Contracts (#12)
+// ============================================================
+
+export type CardSize = 'sm' | 'md' | 'lg';
+
+export const CARD_SIZE_CLASSES: Record<CardSize, string> = {
+  sm: 'w-24 h-36 text-[10px]',
+  md: 'w-40 h-56 text-sm',
+  lg: 'w-52 h-72 text-base',
+};
+
+/** Common props shared across card view components */
+export interface BaseCardViewProps {
+  owned?: OwnedCard | undefined;
+  size?: CardSize;
+  onClick?: () => void;
+  selected?: boolean;
+  duplicateCount?: number;
+}
+
+/** Standardized action for modal buttons */
+export type ActionTone = 'primary' | 'accent' | 'danger' | 'neutral';
+
+export interface CardAction {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: ActionTone;
+  hint?: string;
+}

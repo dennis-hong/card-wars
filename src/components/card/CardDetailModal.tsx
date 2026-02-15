@@ -1,19 +1,9 @@
 'use client';
 
-import { Card, Grade, MAX_LEVEL, OwnedCard, GRADE_COLORS, GRADE_LABELS, GRADE_NAMES, FACTION_COLORS } from '@/types/game';
+import { Card, Grade, MAX_LEVEL, OwnedCard, GRADE_COLORS, GRADE_LABELS, GRADE_NAMES, FACTION_COLORS, ActionTone, CardAction } from '@/types/game';
 import { getTacticEffectLines } from '@/data/cards';
 import WarriorCardView from '@/components/card/WarriorCardView';
 import TacticCardView from '@/components/card/TacticCardView';
-
-type ActionTone = 'primary' | 'accent' | 'danger' | 'neutral';
-
-interface CardDetailAction {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  tone?: ActionTone;
-  hint?: string;
-}
 
 interface Props {
   card: Card | null;
@@ -22,8 +12,8 @@ interface Props {
   isNew?: boolean;
   sourceTag?: string;
   onClose: () => void;
-  primaryAction?: CardDetailAction;
-  secondaryAction?: CardDetailAction;
+  primaryAction?: CardAction;
+  secondaryAction?: CardAction;
 }
 
 const ACTION_TONE_CLASSES: Record<ActionTone, string> = {
@@ -91,7 +81,7 @@ function getTacticRole(description: string): string[] {
   return tags.length > 0 ? tags.slice(0, 3) : ['전술'];
 }
 
-function ActionButton({ action, full }: { action: CardDetailAction; full?: boolean }) {
+function ActionButton({ action, full }: { action: CardAction; full?: boolean }) {
   const tone = action.tone ?? 'primary';
   return (
     <button
