@@ -226,8 +226,13 @@ export function generateActMap(act: RunAct): RoguelikeMap {
   }
 
   const nodes = columnNodes.flat();
-  const startNodeId = columnNodes[0][pathRows[0]]?.id ?? columnNodes[0][0].id;
   const bossNodeId = columnNodes[columns - 1][pathRows[columns - 1]]?.id ?? columnNodes[columns - 1][0].id;
+
+  // Virtual start node — connects to all column-0 nodes so the player picks their first node
+  const startNodeId = '__start__';
+  for (const node of columnNodes[0]) {
+    edges.push({ from: startNodeId, to: node.id });
+  }
 
   return {
     act,
