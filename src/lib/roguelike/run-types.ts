@@ -93,9 +93,11 @@ export interface RunStats {
   battlesWon: number;
   elitesCleared: number;
   goldEarned: number;
+  relicsCollected: number;
   cardsObtained: number;
   battlesFought: number;
   playTimeMs: number;
+  floorsCleared: number;
   lastBattleResult: CombatResult | null;
 }
 

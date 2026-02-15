@@ -3,9 +3,8 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo } from 'react';
 import { useState, useEffect } from 'react';
 import { Card, CombatResult, Deck, MAX_LEVEL, OwnedCard } from '@/types/game';
-import { BattleEngineOptions } from '@/lib/battle/types';
 import { getCardById } from '@/data/cards';
-import { Card as GameCard, Deck as GameDeck } from '@/types/game';
+import { Card as GameCard } from '@/types/game';
 import { useGameStateContext } from '@/context/GameStateContext';
 import { loadRunState, saveRunState, clearRunState, createEmptyRunState } from '@/lib/roguelike/run-storage';
 import { generateId } from '@/lib/uuid';
@@ -29,9 +28,9 @@ import {
   RunEventChoice,
   RunShopItem,
   RunEventDefinition,
+  RunEnemyTemplate,
 } from '@/lib/roguelike/run-types';
-import { RunEnemyTemplate } from '@/lib/roguelike/run-types';
-import { getRelicById, getRelicList, hasRelic as runHasRelic } from '@/lib/roguelike/relics';
+import { getRelicById, hasRelic as runHasRelic } from '@/lib/roguelike/relics';
 import { usePathname, useRouter } from 'next/navigation';
 
 type BattleDamageSummary = { teamDamage: number; teamHpBefore: number; teamHpAfter: number };
@@ -127,17 +126,12 @@ function getRoutePhaseFromRunState(state: RunState): RunPhaseRoute {
   return (state.phase as RunPhaseRoute) ?? 'idle';
 }
 
-function isRelicIdKnown(relicId: string) {
-  return runHasRelic(getRelicList().map((r) => r.id), relicId);
-}
-
 export function RunContextProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const game = useGameStateContext();
   const {
     addCards: addCardsToGlobal,
-    state: gameState,
     setActiveDeck,
     saveDeck: saveGameDeck,
   } = game;
@@ -338,15 +332,29 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       if (!canEnter) {
         return { ...prev, phase: 'deck_build' };
       }
-      const nextMap = prev.map?.columns ? prev.map : attachEncounterData(generateActMap(prev.currentAct || 1));
-      const startNodeId = nextMap?.startNodeId ?? null;
-      const nextVisited = startNodeId ? [startNodeId] : prev.visitedNodes;
+      if (!prev.map) {
+        const nextMap = attachEncounterData(generateActMap(prev.currentAct || 1));
+        return {
+          ...prev,
+          phase: 'running',
+          map: nextMap,
+          currentNodeId: nextMap.startNodeId,
+          visitedNodes: [nextMap.startNodeId],
+        };
+      }
+
+      if (!prev.currentNodeId) {
+        return {
+          ...prev,
+          phase: 'running',
+          currentNodeId: prev.map.startNodeId,
+          visitedNodes: [prev.map.startNodeId],
+        };
+      }
+
       return {
         ...prev,
         phase: 'running',
-        map: nextMap,
-        currentNodeId: startNodeId,
-        visitedNodes: nextVisited,
       };
     });
     router.push('/roguelike/map');
@@ -381,18 +389,26 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     const node = getNodeById(state.map, nodeId);
     if (!node) return false;
 
-    const nextVisited = new Set(state.visitedNodes);
+    const prevVisited = state.visitedNodes;
+    const nextVisited = new Set(prevVisited);
+    const wasVisited = nextVisited.has(nodeId);
     nextVisited.add(nodeId);
-    const visit = Array.from(nextVisited);
 
     setState((prev) => {
       const previous = getNodeById(prev.map as NonNullable<typeof prev.map>, nodeId);
       if (!previous) return prev;
+      const nextVisitedNodes = Array.from(new Set(prev.visitedNodes).add(nodeId));
+      const nextStats = {
+        ...prev.stats,
+        floorsCleared: prev.stats.floorsCleared + (wasVisited ? 0 : 1),
+      };
+
       if (previous.type === 'event') {
         return {
           ...prev,
           currentNodeId: nodeId,
-          visitedNodes: visit,
+          visitedNodes: nextVisitedNodes,
+          stats: nextStats,
           phase: 'event',
           pendingEventId: previous.eventId ?? null,
         };
@@ -401,7 +417,8 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         return {
           ...prev,
           currentNodeId: nodeId,
-          visitedNodes: visit,
+          visitedNodes: nextVisitedNodes,
+          stats: nextStats,
           phase: 'shop',
           pendingShopItems: buildShopInventory().map((item) => ({ ...item })),
         };
@@ -410,14 +427,16 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         return {
           ...prev,
           currentNodeId: nodeId,
-          visitedNodes: visit,
+          visitedNodes: nextVisitedNodes,
+          stats: nextStats,
           phase: 'rest',
         };
       }
       return {
         ...prev,
         currentNodeId: nodeId,
-        visitedNodes: visit,
+        visitedNodes: nextVisitedNodes,
+        stats: nextStats,
         phase: 'battle',
       };
     });
@@ -441,7 +460,14 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       }
       if (prev.relics.length < MAX_RELIC_SLOTS) {
         success = true;
-        return { ...prev, relics: [...prev.relics, relicId] };
+        return {
+          ...prev,
+          relics: [...prev.relics, relicId],
+          stats: {
+            ...prev.stats,
+            relicsCollected: prev.stats.relicsCollected + 1,
+          },
+        };
       }
       if (!replaceRelicId) {
         success = false;
@@ -455,7 +481,14 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       const nextRelics = [...prev.relics];
       nextRelics[index] = relicId;
       success = true;
-      return { ...prev, relics: nextRelics };
+      return {
+        ...prev,
+        relics: nextRelics,
+        stats: {
+          ...prev.stats,
+          relicsCollected: prev.stats.relicsCollected + 1,
+        },
+      };
     });
     return success;
   }, []);
@@ -470,33 +503,29 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     const rewardGold = goldRange
       ? Math.floor(Math.random() * (goldRange.max - goldRange.min + 1)) + goldRange.min
       : 0;
+    const teamHpAfter = Math.max(0, Math.floor(summary.teamHpAfter));
+    const hpAfterDamage = Math.max(0, teamHpAfter);
 
     if (result !== 'win') {
-      const nextHp = Math.max(0, summary.teamHpBefore - summary.teamDamage);
       setState((prev) => ({
         ...prev,
         phase: 'ended',
         result: 'loss',
-        teamHp: Math.max(0, nextHp),
+        teamHp: Math.max(0, Math.min(prev.maxTeamHp, hpAfterDamage)),
         stats: {
           ...prev.stats,
           battlesFought: prev.stats.battlesFought + 1,
           lastBattleResult: result,
           goldEarned: prev.stats.goldEarned + rewardGold,
-          losses: (prev.stats as any).losses ? (prev.stats as any).losses + (result === 'lose' ? 1 : 0) : 0,
         },
       }));
       return;
     }
 
-    const rawDamage = Math.max(0, Math.floor(summary.teamDamage));
-    const relicHeal = computeHealFromRelics(state.relics);
-    const hpAfterDamage = Math.max(0, summary.teamHpBefore - rawDamage);
-    const hpAfter = Math.min(state.maxTeamHp, hpAfterDamage + relicHeal);
-
     setState((prev) => {
-      const nextVisited = new Set(prev.visitedNodes);
-      nextVisited.add(node.id);
+      const relicHeal = computeHealFromRelics(prev.relics);
+      const hpAfter = Math.min(prev.maxTeamHp, hpAfterDamage + relicHeal);
+
       const nextReward: RunRewardPayload = {
         sourceNodeId: node.id,
         sourceType: node.type,
@@ -507,11 +536,9 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       const base: RunState = {
         ...prev,
         teamHp: hpAfter,
-        currentNodeId: prev.currentNodeId,
-        visitedNodes: Array.from(nextVisited),
         stats: {
           ...prev.stats,
-          battlesWon: prev.stats.battlesWon + (result === 'win' ? 1 : 0),
+          battlesWon: prev.stats.battlesWon + 1,
           battlesFought: prev.stats.battlesFought + 1,
           elitesCleared: prev.stats.elitesCleared + (node.type === 'elite' ? 1 : 0),
           goldEarned: prev.stats.goldEarned + rewardGold,
@@ -520,7 +547,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         gold: prev.gold + rewardGold,
         pendingReward: nextReward,
         phase: 'reward',
-        result: node.type === 'boss' && prev.currentAct === 3 ? 'win' : null,
+        result: null,
       };
 
       if (node.type === 'boss' && prev.currentAct < 3) {
@@ -532,33 +559,20 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
           map: nextMap,
           currentNodeId: nextMap.startNodeId,
           visitedNodes: [nextMap.startNodeId],
+          result: null,
         };
       }
 
       if (node.type === 'boss' && prev.currentAct === 3) {
         return {
           ...base,
-          phase: 'ended',
           result: 'win',
-          teamHp: Math.min(prev.maxTeamHp, hpAfter),
         };
       }
 
       return base;
     });
-  }, [state.currentAct, state.currentNodeId, state.map, state.maxTeamHp, state.relics]);
-
-  const returnToMap = useCallback(() => {
-    setState((prev) => {
-      if (prev.phase === 'reward' || prev.phase === 'event' || prev.phase === 'shop' || prev.phase === 'rest') {
-        return { ...prev, phase: prev.result === 'win' || prev.result === 'loss' ? prev.phase : 'running' };
-      }
-      return prev;
-    });
-    if (pathname !== '/roguelike/map') {
-      router.replace('/roguelike/map');
-    }
-  }, [pathname, router]);
+  }, [state.currentAct, state.currentNodeId, state.map]);
 
   const chooseEvent = useCallback((choiceId: string) => {
     const rewardCards: Card[] = [];
@@ -569,10 +583,11 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       const choice = getChoiceById(event, choiceId);
       if (!choice) return prev;
       const nextState = { ...prev };
+      let relicGranted = false;
+
       for (const effect of choice.effects) {
         if (effect.type === 'gold') {
           nextState.gold = Math.max(0, nextState.gold + (effect.value || 0));
-          nextState.teamHp = Math.max(0, Math.min(nextState.maxTeamHp, nextState.teamHp + (effect.value || 0)));
         } else if (effect.type === 'hp') {
           nextState.teamHp = Math.max(0, Math.min(nextState.maxTeamHp, nextState.teamHp + (effect.value || 0)));
         } else if (effect.type === 'card' && effect.cardId) {
@@ -582,15 +597,15 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
           }
         } else if (effect.type === 'relic' && effect.relicId) {
           const relicId = effect.relicId;
-          if (!runHasRelic(getRelicList().map((r) => r.id), relicId)) {
-            if (nextState.relics.length >= MAX_RELIC_SLOTS) {
-              return nextState;
-            }
-            nextState.relics = [...nextState.relics, relicId];
-          }
+          if (runHasRelic(nextState.relics, relicId)) continue;
+          if (nextState.relics.length >= MAX_RELIC_SLOTS) continue;
+          nextState.relics = [...nextState.relics, relicId];
+          relicGranted = true;
         } else if (effect.type === 'removeCard') {
-          const removable = nextState.inventory.find((owned) => owned.cardId !== 'w-lu-bu');
-          if (removable) {
+          const removeCount = Math.max(1, effect.value || 1);
+          for (let i = 0; i < removeCount; i++) {
+            const removable = nextState.inventory.find((owned) => owned.cardId !== 'w-lu-bu');
+            if (!removable) break;
             nextState.inventory = nextState.inventory.filter((owned) => owned.instanceId !== removable.instanceId);
             nextState.deck = normalizeDeck({
               ...nextState.deck,
@@ -601,29 +616,32 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         }
       }
       nextState.pendingEventId = null;
+      if (relicGranted) {
+        nextState.stats = {
+          ...nextState.stats,
+          relicsCollected: nextState.stats.relicsCollected + 1,
+        };
+      }
       nextState.phase = 'running';
       return nextState;
     });
     rewardCards.forEach((card) => addRunCards([card]));
-    returnToMap();
-  }, [addRunCards, returnToMap]);
+  }, [addRunCards]);
 
   const acknowledgeReward = useCallback(() => {
+    let nextRoute = '/roguelike/map';
     setState((prev) => {
       const next = { ...prev, pendingReward: null };
       if (prev.result === 'loss') return { ...next, phase: 'ended' };
       if (prev.phase !== 'reward') return prev;
       if (prev.result === 'win' && prev.currentAct === 3) {
+        nextRoute = '/roguelike/summary';
         return { ...next, phase: 'ended' };
       }
       return { ...next, phase: 'running' };
     });
-    if (state.result === 'win' && state.currentAct === 3) {
-      router.replace('/roguelike/summary');
-      return;
-    }
-    router.replace('/roguelike/map');
-  }, [router, state.currentAct, state.result]);
+    router.replace(nextRoute);
+  }, [router]);
 
   const buyShopItem = useCallback(
     (itemId: string, replaceRelicId?: string, removeInstanceId?: string) => {
@@ -651,6 +669,10 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
             next.relics = [...next.relics, item.relicId];
             success = true;
           }
+          next.stats = {
+            ...next.stats,
+            relicsCollected: next.stats.relicsCollected + 1,
+          };
           return { ...next };
         }
 
@@ -719,10 +741,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         ...prev,
         inventory: prev.inventory.map((entry) => (entry.instanceId === instanceId ? { ...entry, level: entry.level + 1 } : entry)),
         deck: normalizeDeck(
-          {
-            ...prev.deck,
-            warriors: prev.deck.warriors.filter((slot) => slot.instanceId !== instanceId || true),
-          },
+          prev.deck,
           prev.inventory.map((entry) => (entry.instanceId === instanceId ? { ...entry, level: entry.level + 1 } : entry))
         ),
       };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import BattleArena from '@/components/battle/BattleArena';
 import { useRunContext } from '@/context/run-context';
@@ -29,12 +29,6 @@ export default function RoguelikeBattlePage() {
     loaded,
   } = useRunContext();
 
-  const hpBeforeRef = useRef<number>(state.teamHp);
-
-  useEffect(() => {
-    hpBeforeRef.current = state.teamHp;
-  }, [state.currentNodeId, state.phase]);
-
   const currentNode = useMemo(() => {
     if (!state.map || !state.currentNodeId) return null;
     return getNodeById(state.map, state.currentNodeId);
@@ -56,8 +50,10 @@ export default function RoguelikeBattlePage() {
           level: Math.max(1, tactic.level),
         })),
       },
+      teamHp: state.teamHp,
+      maxTeamHp: state.maxTeamHp,
     };
-  }, [currentNode]);
+  }, [currentNode, state.maxTeamHp, state.teamHp]);
 
   const hasEnoughWarriors = useMemo(() => {
     const owned = new Set(state.inventory.map((owned) => owned.instanceId));
@@ -115,12 +111,13 @@ export default function RoguelikeBattlePage() {
         }}
         onBattleEndWithSummary={(result, summary) => {
           completeBattle(result, {
-            teamHpBefore: hpBeforeRef.current,
+            teamHpBefore: state.teamHp,
             teamHpAfter: summary.teamHpAfter,
             teamDamage: summary.teamDamage,
           });
         }}
         battleOptions={battleOptions}
+        runTeamHp={state.teamHp}
         onExit={() => router.push('/roguelike/map')}
       />
     </div>

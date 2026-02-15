@@ -45,15 +45,15 @@ export default function RoguelikeSummaryPage() {
       deck={state.deck}
       inventory={state.inventory}
       playTimeMs={Date.now() - state.startedAt}
-      stats={
-        {
-          battlesWon: state.stats.battlesWon,
-          elitesCleared: state.stats.elitesCleared,
-          goldEarned: state.stats.goldEarned,
-          cardsObtained: state.stats.cardsObtained,
-          battlesFought: state.stats.battlesFought,
-        }
-      }
+      stats={{
+        battlesWon: state.stats.battlesWon,
+        elitesCleared: state.stats.elitesCleared,
+        goldEarned: state.stats.goldEarned,
+        relicsCollected: state.stats.relicsCollected,
+        cardsObtained: state.stats.cardsObtained,
+        battlesFought: state.stats.battlesFought,
+        floorsCleared: state.stats.floorsCleared,
+      }}
       onRetry={() => {
         if (!window.confirm('현재 기록을 초기화하고 다시 시작하시겠습니까?')) {
           return;

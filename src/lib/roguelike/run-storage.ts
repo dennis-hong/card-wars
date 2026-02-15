@@ -31,9 +31,11 @@ const EMPTY_STATS: RunStats = {
   battlesWon: 0,
   elitesCleared: 0,
   goldEarned: 0,
+  relicsCollected: 0,
   cardsObtained: 0,
   battlesFought: 0,
   playTimeMs: 0,
+  floorsCleared: 0,
   lastBattleResult: null,
 };
 
@@ -448,9 +450,11 @@ function sanitizeRunState(raw: unknown): RunState {
     battlesWon: clampInt(statsRaw.battlesWon, 0),
     elitesCleared: clampInt(statsRaw.elitesCleared, 0),
     goldEarned: clampInt(statsRaw.goldEarned, 0),
+    relicsCollected: clampInt(statsRaw.relicsCollected, 0),
     cardsObtained: clampInt(statsRaw.cardsObtained, 0),
     battlesFought: clampInt(statsRaw.battlesFought, 0),
     playTimeMs: clampInt(statsRaw.playTimeMs, 0),
+    floorsCleared: clampInt(statsRaw.floorsCleared, 0),
     lastBattleResult:
       statsRaw.lastBattleResult === 'win' || statsRaw.lastBattleResult === 'lose' || statsRaw.lastBattleResult === 'draw'
         ? statsRaw.lastBattleResult

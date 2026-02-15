@@ -19,8 +19,10 @@ interface Props {
     battlesWon: number;
     elitesCleared: number;
     goldEarned: number;
+    relicsCollected: number;
     cardsObtained: number;
     battlesFought: number;
+    floorsCleared: number;
   };
   playTimeMs?: number;
   onRetry: () => void;
@@ -102,12 +104,20 @@ export default function RunSummary({
               <div className="font-bold text-blue-300">{stats.goldEarned}G</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/25 p-2">
+              <div className="text-gray-300 text-xs">수집 보물</div>
+              <div className="font-bold text-amber-300">{stats.relicsCollected}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/25 p-2">
               <div className="text-gray-300 text-xs">최종 체력</div>
               <div className="font-bold text-rose-300">{teamHp}/{maxTeamHp}</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/25 p-2">
               <div className="text-gray-300 text-xs">획득 카드</div>
               <div className="font-bold text-purple-300">{stats.cardsObtained}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/25 p-2">
+              <div className="text-gray-300 text-xs">클리어 층</div>
+              <div className="font-bold text-cyan-300">{stats.floorsCleared}</div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/25 p-2">
               <div className="text-gray-300 text-xs">전투 횟수</div>
@@ -152,7 +162,7 @@ export default function RunSummary({
             onClick={onRetry}
             className="ui-btn ui-btn-primary py-3"
           >
-            다시 도전
+            새로운 탐험
           </button>
           <Link
             href="/"

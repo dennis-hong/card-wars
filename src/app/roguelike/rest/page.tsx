@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { getCardById } from '@/data/cards';
 import { useRunContext } from '@/context/run-context';
 import RunHeader from '@/components/roguelike/RunHeader';
@@ -12,7 +11,6 @@ function formatHp(hp: number, max: number) {
 }
 
 export default function RoguelikeRestPage() {
-  const router = useRouter();
   const {
     state,
     healByRest,
@@ -81,7 +79,6 @@ export default function RoguelikeRestPage() {
         <button
           onClick={() => {
             goToMap();
-            router.push('/roguelike/map');
           }}
           className="ui-btn ui-btn-neutral w-full py-3"
         >

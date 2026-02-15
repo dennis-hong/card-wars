@@ -33,6 +33,7 @@ interface Props {
   onExit: () => void;
   streakReward?: { type: string; streak: number } | null;
   battleOptions?: BattleEngineOptions;
+  runTeamHp?: number;
 }
 
 interface LiveLogEntry {
@@ -88,6 +89,7 @@ export default function BattleArena({
   onExit,
   streakReward,
   battleOptions,
+  runTeamHp,
 }: Props) {
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [animating, setAnimating] = useState(false);
@@ -813,8 +815,9 @@ export default function BattleArena({
             <button
               onClick={() => {
                 const team = getBattleTeamHp();
+                const teamHpBefore = Number.isFinite(runTeamHp ?? 0) ? Math.max(0, runTeamHp ?? 0) : team.max;
                 onBattleEndWithSummary?.(battle.result!, {
-                  teamHpBefore: team.max,
+                  teamHpBefore,
                   teamHpAfter: team.current,
                   teamDamage: team.damage,
                 });
