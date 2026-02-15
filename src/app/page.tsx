@@ -138,6 +138,13 @@ export default function Home() {
           </button>
 
           <button
+            onClick={() => navigate('/roguelike')}
+            className="ui-btn ui-btn-primary w-full py-4 min-h-14 text-lg border border-red-500/20"
+          >
+            🗺️ 원정 모드
+          </button>
+
+          <button
             onClick={() => navigate('/deck')}
             className="ui-btn ui-btn-neutral w-full py-3 min-h-12"
           >

@@ -6,6 +6,7 @@ import { getWarriorById, getTacticById } from '@/data/cards';
 import { initBattle, applyTactic, resolveCombat, selectAITactic } from '@/lib/battle-engine';
 import { SFX } from '@/lib/sound';
 import { BATTLE_ANIMATION_PRESETS } from '@/lib/animation-presets';
+import { BattleEngineOptions } from '@/lib/battle/types';
 import { getFieldEffectSummary, getForecastTarget, getFirstAlive } from '@/lib/battle/preview-utils';
 import { BATTLE_LANES as ARENA_LANES } from '@/lib/display-constants';
 import BattleAnimationStyles from '@/components/battle/BattleAnimationStyles';
@@ -21,8 +22,17 @@ interface Props {
   ownedCards: OwnedCard[];
   wins: number;
   onBattleEnd: (result: 'win' | 'lose' | 'draw') => void;
+  onBattleEndWithSummary?: (
+    result: 'win' | 'lose' | 'draw',
+    summary: {
+      teamHpBefore: number;
+      teamHpAfter: number;
+      teamDamage: number;
+    },
+  ) => void;
   onExit: () => void;
   streakReward?: { type: string; streak: number } | null;
+  battleOptions?: BattleEngineOptions;
 }
 
 interface LiveLogEntry {
@@ -74,8 +84,10 @@ export default function BattleArena({
   ownedCards,
   wins,
   onBattleEnd,
+  onBattleEndWithSummary,
   onExit,
   streakReward,
+  battleOptions,
 }: Props) {
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [animating, setAnimating] = useState(false);
@@ -104,6 +116,13 @@ export default function BattleArena({
     setTacticAnimState((prev) => ({ ...prev, [idx]: state }));
   }, []);
 
+  const getBattleTeamHp = useCallback(() => {
+    if (!battle) return { max: 0, current: 0, damage: 0 };
+    const max = battle.player.warriors.reduce((sum, warrior) => sum + Math.max(0, warrior.maxHp), 0);
+    const current = battle.player.warriors.reduce((sum, warrior) => sum + Math.max(0, warrior.currentHp), 0);
+    return { max, current, damage: Math.max(0, max - current) };
+  }, [battle]);
+
   const addLiveLog = useCallback((text: string) => {
     const entry: LiveLogEntry = {
       id: ++logCounter,
@@ -126,7 +145,7 @@ export default function BattleArena({
   }, [liveLog.length]);
 
   useEffect(() => {
-    const b = initBattle(deck, ownedCards, wins);
+    const b = initBattle(deck, ownedCards, wins, battleOptions);
     setBattle(b);
 
     setShowFieldEvent(true);
@@ -141,7 +160,7 @@ export default function BattleArena({
     timerRef.current.push(t1);
     const timers = [...timerRef.current];
     return () => timers.forEach(clearTimeout);
-  }, [deck, ownedCards, wins]);
+  }, [battleOptions, deck, ownedCards, wins]);
 
   const showCombatEvents = useCallback((events: CombatEvent[]) => {
     const newFloats: FloatingNumber[] = [];
@@ -792,7 +811,15 @@ export default function BattleArena({
           </div>
           <div>
             <button
-              onClick={() => onBattleEnd(battle.result!)}
+              onClick={() => {
+                const team = getBattleTeamHp();
+                onBattleEndWithSummary?.(battle.result!, {
+                  teamHpBefore: team.max,
+                  teamHpAfter: team.current,
+                  teamDamage: team.damage,
+                });
+                onBattleEnd(battle.result!);
+              }}
               className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-all hover:scale-105 active:scale-95"
               style={{ boxShadow: '0 4px 15px rgba(37,99,235,0.4)' }}
             >

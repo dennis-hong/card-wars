@@ -374,7 +374,7 @@ function normalizeShopItems(raw: unknown): RunShopItem[] {
       };
       if (typeof i.id !== 'string' || !i.id) return null;
       const type =
-        i.type === 'relic' || i.type === 'heal' || i.type === 'remove' || i.type === 'card'
+        i.type === 'relic' || i.type === 'heal' || i.type === 'restore' || i.type === 'remove' || i.type === 'card'
           ? i.type
           : null;
       if (!type) return null;
@@ -552,8 +552,6 @@ export function saveRunState(state: RunState): void {
     version: STORAGE_VERSION,
     state: {
       ...state,
-      stateVersion: STORAGE_VERSION,
-      updatedAt: Date.now(),
     },
   };
 

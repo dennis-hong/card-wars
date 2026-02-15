@@ -74,7 +74,7 @@ export interface RunShopItem {
   id: string;
   label: string;
   price: number;
-  type: 'relic' | 'heal' | 'remove' | 'card';
+  type: 'relic' | 'heal' | 'restore' | 'remove' | 'card';
   cardId?: string;
   relicId?: string;
 }

@@ -20,7 +20,7 @@ const ROW_OPTIONS: ReadonlyArray<2 | 3> = [2, 3];
 
 type RowCount = typeof ROW_OPTIONS[number];
 
-function randomPick<T>(items: T[]): T {
+function randomPick<T>(items: readonly T[]): T {
   if (items.length === 0) throw new Error('빈 배열에서 랜덤 선택 불가');
   return items[Math.floor(Math.random() * items.length)];
 }

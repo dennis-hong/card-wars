@@ -2,7 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useMemo } from 'react';
 import { useState, useEffect } from 'react';
-import { Card, CombatResult, Deck, MAX_LEVEL, OwnedCard, RunState as _Tmp } from '@/types/game';
+import { Card, CombatResult, Deck, MAX_LEVEL, OwnedCard } from '@/types/game';
 import { BattleEngineOptions } from '@/lib/battle/types';
 import { getCardById } from '@/data/cards';
 import { Card as GameCard, Deck as GameDeck } from '@/types/game';
@@ -20,8 +20,6 @@ import { getEnemyTemplate, getGoldRewardRange } from '@/lib/roguelike/enemy-gene
 import { buildShopInventory } from '@/lib/roguelike/shop';
 import { getChoiceById, getEventById } from '@/lib/roguelike/events';
 import {
-  getRelicById,
-  hasRelic as runHasRelic,
   MAX_RELIC_SLOTS,
   RunNodeType,
   RunRewardPayload,
@@ -33,7 +31,7 @@ import {
   RunEventDefinition,
 } from '@/lib/roguelike/run-types';
 import { RunEnemyTemplate } from '@/lib/roguelike/run-types';
-import { getRelicList } from '@/lib/roguelike/relics';
+import { getRelicById, getRelicList, hasRelic as runHasRelic } from '@/lib/roguelike/relics';
 import { usePathname, useRouter } from 'next/navigation';
 
 type BattleDamageSummary = { teamDamage: number; teamHpBefore: number; teamHpAfter: number };
@@ -412,7 +410,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     if (!getRelicById(relicId)) return false;
     let success = false;
     setState((prev) => {
-      if (hasRelic(prev.relics, relicId)) {
+      if (runHasRelic(prev.relics, relicId)) {
         success = false;
         return prev;
       }
@@ -481,7 +479,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         gold: rewardGold,
         relicOptions: node.type === 'elite' || node.type === 'boss' ? enemy.relicChoices || [] : [],
       };
-      const base = {
+      const base: RunState = {
         ...prev,
         teamHp: hpAfter,
         currentNodeId: prev.currentNodeId,
@@ -524,6 +522,18 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       return base;
     });
   }, [state.currentAct, state.currentNodeId, state.map, state.maxTeamHp, state.relics]);
+
+  const returnToMap = useCallback(() => {
+    setState((prev) => {
+      if (prev.phase === 'reward' || prev.phase === 'event' || prev.phase === 'shop' || prev.phase === 'rest') {
+        return { ...prev, phase: prev.result === 'win' || prev.result === 'loss' ? prev.phase : 'running' };
+      }
+      return prev;
+    });
+    if (pathname !== '/roguelike/map') {
+      router.replace('/roguelike/map');
+    }
+  }, [pathname, router]);
 
   const chooseEvent = useCallback((choiceId: string) => {
     setState((prev) => {
@@ -574,18 +584,6 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     });
     returnToMap();
   }, [addRunCards, returnToMap]);
-
-  const returnToMap = useCallback(() => {
-    setState((prev) => {
-      if (prev.phase === 'reward' || prev.phase === 'event' || prev.phase === 'shop' || prev.phase === 'rest') {
-        return { ...prev, phase: prev.result === 'win' || prev.result === 'loss' ? prev.phase : 'running' };
-      }
-      return prev;
-    });
-    if (pathname !== '/roguelike/map') {
-      router.replace('/roguelike/map');
-    }
-  }, [pathname, router]);
 
   const acknowledgeReward = useCallback(() => {
     setState((prev) => {
