@@ -241,13 +241,13 @@ export default function RoguelikeLandingPage() {
                 )}
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 {(recommendedDeck?.tactics ?? []).map((instanceId) => {
                   const owned = state.inventory.find((entry) => entry.instanceId === instanceId);
                   const cardData = owned ? getCardById(owned.cardId) : null;
                   if (!owned || !cardData || cardData.type !== 'tactic') return null;
                   return (
-                    <div key={instanceId} className="w-[48%]">
+                    <div key={instanceId}>
                       <TacticCardView card={cardData} owned={owned} size="sm" />
                     </div>
                   );
