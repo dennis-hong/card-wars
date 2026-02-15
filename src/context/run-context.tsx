@@ -165,17 +165,58 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       }
 
       const added = addCardsToGlobal(cards);
-      if (added.length > 0) {
-        setState((prev) => ({
-          ...prev,
-          inventory: [...prev.inventory, ...added],
-          stats: {
-            ...prev.stats,
-            cardsObtained: prev.stats.cardsObtained + added.length,
-          },
-        }));
+      if (cards.length > 0) {
+        setState((prev) => {
+          const inventory: OwnedCard[] = [];
+          const firstIndex = new Map<string, number>();
+
+          for (const owned of prev.inventory) {
+            const existingIdx = firstIndex.get(owned.cardId);
+            if (existingIdx === undefined) {
+              firstIndex.set(owned.cardId, inventory.length);
+              inventory.push({ ...owned });
+            } else {
+              const existing = inventory[existingIdx];
+              const extraCopies = Math.max(owned.level, owned.duplicates + 1);
+              inventory[existingIdx] = {
+                ...existing,
+                level: existing.level + extraCopies,
+                duplicates: existing.duplicates + extraCopies,
+              };
+            }
+          }
+
+          for (const card of cards) {
+            const index = inventory.findIndex((owned) => owned.cardId === card.id);
+            if (index >= 0) {
+              const base = inventory[index];
+              inventory[index] = {
+                ...base,
+                level: base.level + 1,
+                duplicates: base.duplicates + 1,
+              };
+            } else {
+              inventory.push({
+                instanceId: generateId(),
+                cardId: card.id,
+                level: 1,
+                duplicates: 0,
+              });
+            }
+          }
+
+          return {
+            ...prev,
+            inventory,
+            stats: {
+              ...prev.stats,
+              cardsObtained: prev.stats.cardsObtained + cards.length,
+            },
+          };
+        });
       }
-      return { cards: added, count: added.length };
+
+      return { cards: added, count: cards.length };
     },
     [addCardsToGlobal]
   );
@@ -213,48 +254,36 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ensureStarterComposition = useCallback(() => {
-    setState((prev) => {
-      let missingWarrior = Math.max(0, 3 - countCardType(prev.inventory, isWarriorCard));
-      let missingTactic = Math.max(0, 2 - countCardType(prev.inventory, isTacticCard));
-      const bonusCards: Card[] = [];
-      let guard = 24;
+    const warriors = countCardType(state.inventory, isWarriorCard);
+    const tactics = countCardType(state.inventory, isTacticCard);
+    let missingWarrior = Math.max(0, 3 - warriors);
+    let missingTactic = Math.max(0, 2 - tactics);
 
-      while ((missingWarrior > 0 || missingTactic > 0) && guard > 0) {
-        const reroll = openPack('normal');
-        bonusCards.push(...reroll);
+    if (missingWarrior === 0 && missingTactic === 0) return;
 
-        for (const card of reroll) {
-          if (isWarriorCard(card) && missingWarrior > 0) {
-            missingWarrior -= 1;
-          } else if (isTacticCard(card) && missingTactic > 0) {
-            missingTactic -= 1;
-          }
+    const bonusCards: Card[] = [];
+    let guard = 30;
+
+    while ((missingWarrior > 0 || missingTactic > 0) && guard > 0) {
+      const reroll = openPack('normal');
+      for (const card of reroll) {
+        if (isWarriorCard(card) && missingWarrior > 0) {
+          bonusCards.push(card);
+          missingWarrior -= 1;
+        } else if (isTacticCard(card) && missingTactic > 0) {
+          bonusCards.push(card);
+          missingTactic -= 1;
         }
-
-        guard -= 1;
       }
-
-      return prev;
-    });
-    if (state.inventory.length < 5) {
-      const extra: Card[] = [];
-      let missingWarrior = Math.max(0, 3 - countCardType(state.inventory, isWarriorCard));
-      let missingTactic = Math.max(0, 2 - countCardType(state.inventory, isTacticCard));
-      let guard = 24;
-      while ((missingWarrior > 0 || missingTactic > 0) && guard > 0) {
-        const reroll = openPack('normal');
-        extra.push(...reroll);
-        for (const card of reroll) {
-          if (isWarriorCard(card) && missingWarrior > 0) missingWarrior -= 1;
-          else if (isTacticCard(card) && missingTactic > 0) missingTactic -= 1;
-        }
-        guard -= 1;
-      }
-      if (extra.length > 0) {
-        addRunCards(extra);
-      }
+      guard -= 1;
     }
-  }, [addRunCards, state.inventory.length]);
+
+    if (bonusCards.length > 0) {
+      addRunCards(bonusCards);
+    }
+  }, [state.inventory, addRunCards]);
+
+  // (legacy block removed)
 
   const openStarterPack = useCallback(
     (packId: string) => {
@@ -263,7 +292,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       if (!pack || pack.opened) return null;
 
       const cards = openPack('normal');
-      const added = addRunCards(cards);
+      addRunCards(cards);
 
       setState((prev) => {
         const packs = prev.openedStarterPacks.map((item) =>
@@ -273,24 +302,20 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         return {
           ...prev,
           openedStarterPacks: packs,
-          inventory: [...prev.inventory, ...added.cards],
           phase: nextPhase,
           pendingReward: null,
         };
       });
 
+      // All packs opened → ensure safety net (min 3 warriors + 2 tactics)
       if (state.openedStarterPacks.every((item) => item.opened || item.id === packId)) {
-        const deckSummary = getDeckSummary(state.deck);
-        if (deckSummary.ready) {
-          router.replace('/roguelike');
-        } else {
-          router.replace('/roguelike');
-        }
+        // Safety net runs on next tick after state updates
+        setTimeout(() => ensureStarterComposition(), 100);
       }
 
       return cards;
     },
-    [addRunCards, router, state.openedStarterPacks, state.phase, state.deck, state]
+    [addRunCards, router, state.openedStarterPacks, state.phase, state.deck, state, ensureStarterComposition]
   );
 
   const saveDeck = useCallback((deck: Deck) => {
@@ -536,6 +561,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   const chooseEvent = useCallback((choiceId: string) => {
+    const rewardCards: Card[] = [];
     setState((prev) => {
       if (!prev.pendingEventId || prev.phase !== 'event') return prev;
       const event = getEventById(prev.pendingEventId) as RunEventDefinition | null;
@@ -543,7 +569,6 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       const choice = getChoiceById(event, choiceId);
       if (!choice) return prev;
       const nextState = { ...prev };
-      const inventory = [...nextState.inventory];
       for (const effect of choice.effects) {
         if (effect.type === 'gold') {
           nextState.gold = Math.max(0, nextState.gold + (effect.value || 0));
@@ -553,10 +578,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         } else if (effect.type === 'card' && effect.cardId) {
           const card = getCardById(effect.cardId);
           if (card) {
-            const cards = addRunCards([card]).cards;
-            if (cards.length > 0) {
-              nextState.inventory = [...nextState.inventory, ...cards];
-            }
+            rewardCards.push(card);
           }
         } else if (effect.type === 'relic' && effect.relicId) {
           const relicId = effect.relicId;
@@ -582,6 +604,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
       nextState.phase = 'running';
       return nextState;
     });
+    rewardCards.forEach((card) => addRunCards([card]));
     returnToMap();
   }, [addRunCards, returnToMap]);
 
@@ -605,6 +628,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
   const buyShopItem = useCallback(
     (itemId: string, replaceRelicId?: string, removeInstanceId?: string) => {
       let success = false;
+      let rewardCard: Card | null = null;
       setState((prev) => {
         if (prev.phase !== 'shop') return prev;
         const item = prev.pendingShopItems.find((entry) => entry.id === itemId);
@@ -654,15 +678,16 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
           if (!cardId) return prev;
           const card = getCardById(cardId);
           if (!card) return prev;
-          const added = addRunCards([card]).cards;
-          if (added.length === 0) return prev;
-          next.inventory = [...next.inventory, ...added];
           success = true;
+          rewardCard = card;
           return next;
         }
 
         return prev;
       });
+      if (rewardCard) {
+        addRunCards([rewardCard]);
+      }
       return success;
     },
     [addRunCards]

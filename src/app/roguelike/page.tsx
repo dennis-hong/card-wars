@@ -2,19 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { Card } from '@/types/game';
+import { Card, Deck } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import DeckFormation from '@/components/roguelike/DeckFormation';
+import TacticCardView from '@/components/card/TacticCardView';
+import WarriorCardView from '@/components/card/WarriorCardView';
 import { useRunContext } from '@/context/run-context';
 
 const PACK_LABEL = {
   normal: '🧧 일반팩',
 };
-
-function getDeckReady(deck: { warriors: unknown[]; tactics: unknown[] }) {
-  return deck.warriors.length >= 3 && deck.tactics.length >= 2;
-}
 
 export default function RoguelikeLandingPage() {
   const router = useRouter();
@@ -32,7 +29,6 @@ export default function RoguelikeLandingPage() {
   const [revealedCards, setRevealedCards] = useState<Card[]>([]);
   const [revealedPackId, setRevealedPackId] = useState<string | null>(null);
 
-  const starterReady = getDeckReady(state.deck);
   const phase = state.phase;
   const canContinue = state.phase !== 'idle' && state.phase !== 'ended';
 
@@ -75,13 +71,14 @@ export default function RoguelikeLandingPage() {
     }
   };
 
-  const handleSaveDeck = (nextDeck: { warriors: { instanceId: string; lane: 'front' | 'mid' | 'back' }[]; tactics: string[] }) => {
+  const handleSaveDeck = (nextDeck: Deck) => {
     saveDeck({
       id: state.deck.id || 'roguelike-formation',
       name: state.deck.name || '원정대',
       warriors: nextDeck.warriors,
       tactics: nextDeck.tactics,
     });
+    goToMap();
   };
 
   const handleStart = () => {
@@ -181,20 +178,6 @@ export default function RoguelikeLandingPage() {
         {phase === 'deck_build' && (
           <div className="space-y-3">
             <DeckFormation deck={state.deck} inventory={state.inventory} onSave={handleSaveDeck} />
-
-            <button
-              onClick={() => {
-                if (starterReady) goToMap();
-              }}
-              disabled={!starterReady}
-              className={`w-full py-3 rounded-xl font-bold ${
-                starterReady
-                  ? 'ui-btn ui-btn-primary'
-                  : 'bg-gray-700 text-gray-300'
-              }`}
-            >
-              덱 확정 후 맵 진입
-            </button>
           </div>
         )}
 
@@ -256,22 +239,30 @@ export default function RoguelikeLandingPage() {
         )}
 
         {(revealedCards.length > 0 && revealedPackId) && (
-          <div className="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center">
-            <div className="w-full max-w-xl bg-gray-900 border border-white/20 rounded-2xl p-4">
-              <div className="text-white font-bold mb-3">{PACK_LABEL.normal} 개봉 결과</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center">
+            <div className="w-full max-w-3xl bg-gray-900 border border-indigo-500/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(99,102,241,0.25)]">
+              <div className="text-white text-lg font-black mb-3">{PACK_LABEL.normal} 개봉 결과</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {revealedCards.map((card, index) => {
-                const cardData = getCardById(card.id);
-                if (!cardData) return null;
-                  const image = 'image' in cardData && cardData.image ? cardData.image : '/images/title-card.png';
+                  const cardData = getCardById(card.id);
+                  if (!cardData) return null;
+                  if (cardData.type === 'warrior') {
+                    return (
+                      <WarriorCardView
+                        key={`${cardData.id}-${index}`}
+                        card={cardData}
+                        size="sm"
+                        owned={undefined}
+                      />
+                    );
+                  }
+
                   return (
-                    <Image
+                    <TacticCardView
                       key={`${cardData.id}-${index}`}
-                      src={image}
-                      alt={cardData.name}
-                      width={140}
-                      height={190}
-                      className="w-full h-auto rounded-lg border border-white/15 object-cover"
+                      card={cardData}
+                      size="sm"
+                      owned={undefined}
                     />
                   );
                 })}

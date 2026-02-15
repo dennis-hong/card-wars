@@ -20,6 +20,12 @@ function toLane(index: number): Lane {
   return 'back';
 }
 
+const LANES: Record<Lane, string> = {
+  front: '전위',
+  mid: '중위',
+  back: '후위',
+};
+
 function getWarriorCards(inventory: OwnedCard[]) {
   return inventory.filter((owned) => {
     const card = getCardById(owned.cardId);
@@ -95,12 +101,6 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
     });
   }
 
-  function cardName(instanceId: string) {
-    const owned = inventory.find((item) => item.instanceId === instanceId);
-    const card = owned ? getCardById(owned.cardId) : null;
-    return card?.name ?? '알 수 없음';
-  }
-
   const warriorCards = availableWarriors.map((owned) => {
     const card = getCardById(owned.cardId);
     if (!card || card.type !== 'warrior') return null;
@@ -113,22 +113,77 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
     return { owned, card };
   }).filter((entry): entry is { owned: OwnedCard; card: TacticCard } => !!entry);
 
+  const selectedWarriorCards = selectedWarriorIds
+    .map((instanceId) => {
+      const owned = inventory.find((item) => item.instanceId === instanceId);
+      if (!owned) return null;
+      const card = getCardById(owned.cardId);
+      if (!card || card.type !== 'warrior') return null;
+      return { owned, card };
+    })
+    .filter((entry): entry is { owned: OwnedCard; card: WarriorCard } => !!entry);
+
+  const selectedTacticCards = selectedTacticIds
+    .map((instanceId) => {
+      const owned = inventory.find((item) => item.instanceId === instanceId);
+      if (!owned) return null;
+      const card = getCardById(owned.cardId);
+      if (!card || card.type !== 'tactic') return null;
+      return { owned, card };
+    })
+    .filter((entry): entry is { owned: OwnedCard; card: TacticCard } => !!entry);
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
         <h2 className="text-white text-lg font-black mb-2">현재 편성</h2>
-        <div className="space-y-1 text-sm">
-          <div>
-            무장: {warriorReady ? `${selectedWarriorIds.length} / 3` : `${selectedWarriorIds.length} / 3`}
+        <div className="grid grid-cols-3 gap-2">
+          {warriorSlots.map((slot, index) => {
+            const lane = LANES[toLane(index)];
+            const warrior = slot ? selectedWarriorCards.find((entry) => entry.owned.instanceId === slot.instanceId) : null;
+            if (!slot || !warrior) {
+              return (
+                <div
+                  key={`slot-${index}`}
+                  className="rounded-lg border border-dashed border-white/20 p-1 bg-black/20 min-h-[10rem] flex items-center justify-center text-xs text-gray-400"
+                >
+                  {lane}
+                </div>
+              );
+            }
+
+            return (
+              <div key={slot.instanceId} className="space-y-1">
+                <WarriorCardView
+                  card={warrior.card}
+                  owned={warrior.owned}
+                  size="sm"
+                  selected={false}
+                />
+                <div className="text-center text-[11px] text-amber-300 font-bold">{LANES[slot.lane]}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-2">
+          <div className="text-white text-xs mb-1">
+            무장: {selectedWarriorCards.length} / 3
           </div>
-          <div className="text-gray-300">
-            {selectedWarriorIds.length > 0 ? selectedWarriorIds.map(cardName).join(' · ') : '무장 미선택'}
+          <div className="text-white text-xs mb-2">
+            전법: {selectedTacticCards.length} / 2
           </div>
-          <div>
-            전법: {tacticReady ? `${selectedTacticIds.length} / 2` : `${selectedTacticIds.length} / 2`}
-          </div>
-          <div className="text-gray-300">
-            {selectedTacticIds.length > 0 ? selectedTacticIds.map(cardName).join(' · ') : '전법 미선택'}
+          <div className="grid grid-cols-2 gap-1.5">
+            {selectedTacticCards.length === 0 && <div className="text-gray-400 text-xs">전법 미선택</div>}
+            {selectedTacticCards.map(({ owned, card }) => (
+              <TacticCardView
+                key={`summary-${owned.instanceId}`}
+                card={card}
+                owned={owned}
+                size="sm"
+                selected={false}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -136,17 +191,20 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
         <h2 className="text-white font-bold mb-2">무장 후보 (3선택)</h2>
         {warriorCards.length === 0 && <div className="text-gray-400 text-sm">무장 인벤토리가 없습니다.</div>}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {warriorCards.map(({ owned, card }) => (
-            <WarriorCardView
-              key={owned.instanceId}
-              card={card}
-              owned={owned}
-              size="sm"
-              selected={selectedWarriorIds.includes(owned.instanceId)}
-              onClick={() => toggleWarrior(owned.instanceId)}
-              duplicateCount={owned.duplicates}
-            />
+            <div key={owned.instanceId} className="space-y-1">
+              <div className={`${selectedWarriorIds.includes(owned.instanceId) ? 'rounded-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-black/20 shadow-[0_0_18px_rgba(251,191,36,0.45)]' : ''}`}>
+                <WarriorCardView
+                  card={card}
+                  owned={owned}
+                  size="sm"
+                  selected={false}
+                  onClick={() => toggleWarrior(owned.instanceId)}
+                  duplicateCount={owned.duplicates}
+                />
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -154,16 +212,20 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
         <h2 className="text-white font-bold mb-2">전법 후보 (2선택)</h2>
         {tacticCards.length === 0 && <div className="text-gray-400 text-sm">전법 인벤토리가 없습니다.</div>}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {tacticCards.map(({ owned, card }) => (
-            <TacticCardView
-              key={owned.instanceId}
-              card={card}
-              owned={owned}
-              size="sm"
-              selected={selectedTacticIds.includes(owned.instanceId)}
-              onClick={() => toggleTactic(owned.instanceId)}
-            />
+            <div key={owned.instanceId} className="space-y-1">
+              <div className={`${selectedTacticIds.includes(owned.instanceId) ? 'rounded-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-black/20 shadow-[0_0_18px_rgba(251,191,36,0.45)]' : ''}`}>
+                <TacticCardView
+                  key={owned.instanceId}
+                  card={card}
+                  owned={owned}
+                  size="sm"
+                  selected={false}
+                  onClick={() => toggleTactic(owned.instanceId)}
+                />
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -182,18 +244,11 @@ export default function DeckFormation({ deck, inventory, onSave }: Props) {
             : 'ui-btn ui-btn-primary'
         }`}
       >
-        전투 편성 확정
+        덱 확정 후 맵 진입
       </button>
 
       {!warriorReady && <p className="text-xs text-yellow-300">무장 3장, 전법 2장을 모두 선택해야 합니다.</p>}
       {!tacticReady && <p className="text-xs text-yellow-300">전법 2장까지 선택 가능합니다.</p>}
-
-      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-        <h3 className="font-bold text-sm mb-2">최대 강함 제한</h3>
-        <div className="text-xs text-gray-300">
-          레벨은 부스터에서 자동 반영됩니다. 예: {selectedWarriorIds[0] ? `Lv.${Math.max(1, inventory.find((item) => item.instanceId === selectedWarriorIds[0])?.level || 1)}` : ''}
-        </div>
-      </div>
     </div>
   );
 }
