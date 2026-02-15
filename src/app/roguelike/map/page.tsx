@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import RunHeader from '@/components/roguelike/RunHeader';
 import RunMap from '@/components/roguelike/RunMap';
 import { useRunContext } from '@/context/run-context';
+import { RunAct } from '@/lib/roguelike/run-types';
+
+const ACT_TITLES: Record<RunAct, string> = {
+  1: '황건토벌',
+  2: '적벽대전',
+  3: '장안 공략',
+};
 
 export default function RoguelikeMapPage() {
   const router = useRouter();
@@ -16,6 +23,7 @@ export default function RoguelikeMapPage() {
   } = useRunContext();
 
   const reachable = useMemo(() => getCurrentNodeReachable(), [getCurrentNodeReachable]);
+  const actTitle = ACT_TITLES[state.currentAct] ?? '황건토벌';
 
   if (!state.map) {
     return (
@@ -55,12 +63,11 @@ export default function RoguelikeMapPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <RunHeader />
-      <div className="p-3 space-y-3">
-        <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-gray-200">
-          현재 노드: {state.currentNodeId ?? '대기'}
-        </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-          <div className="text-sm font-bold text-white mb-2">맵</div>
+      <div className="px-3 pt-3 pb-2">
+        <h1 className="text-lg font-extrabold tracking-wide text-amber-100">Act {state.currentAct}: {actTitle}</h1>
+      </div>
+      <div className="h-[calc(100vh-64px)]">
+        <div className="h-full border border-white/10 bg-black/30">
           <RunMap state={state} selectableNodes={reachable} onSelect={onSelect} />
         </div>
       </div>
