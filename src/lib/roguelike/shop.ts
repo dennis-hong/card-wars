@@ -1,4 +1,3 @@
-import { Card } from '@/types/game';
 import { WARRIOR_CARDS, TACTIC_CARDS } from '@/data/cards';
 import { getRelicList } from '@/lib/roguelike/relics';
 import { DeterministicRandom } from '@/lib/rng';

@@ -28,71 +28,80 @@ const OwnedCardsContext = createContext<OwnedCardsSlice | null>(null);
 const DeckContext = createContext<DeckSlice | null>(null);
 const BattleProgressContext = createContext<BattleSlice | null>(null);
 
-function buildOwnedCardsSlice(state: GameStateHook): OwnedCardsSlice {
-  return {
-    ownedCards: state.state.ownedCards,
-    ownedCardIds: new Set(state.state.ownedCards.map((ownedCard) => ownedCard.cardId)),
-    addCards: state.addCards,
-    openBooster: state.openBooster,
-    enhanceCard: state.enhanceCard,
-    mergeCards: state.mergeCards,
-  };
-}
-
-function buildDeckSlice(state: GameStateHook): DeckSlice {
-  return {
-    decks: state.state.decks,
-    decksCount: state.state.decks.length,
-    activeDeckId: state.state.activeDeckId,
-    saveDeck: state.saveDeck,
-    deleteDeck: state.deleteDeck,
-    setActiveDeck: state.setActiveDeck,
-  };
-}
-
-function buildCoreSlice(state: GameStateHook): CoreSlice {
-  return {
-    state: state.state,
-    loaded: state.loaded,
-    newTitleIds: state.newTitleIds,
-    dismissNewTitles: state.dismissNewTitles,
-    setActiveTitle: state.setActiveTitle,
-    enhanceableCount: state.enhanceableCount,
-    resetGame: state.resetGame,
-  };
-}
-
-function buildBattleSlice(state: GameStateHook): BattleSlice {
-  return {
-    recordBattleResult: state.recordBattleResult,
-    addBoosterPack: state.addBoosterPack,
-    recordScenarioClear: state.recordScenarioClear,
-  };
-}
-
 export function GameStateProvider({ children }: { children: ReactNode }) {
-  const state = useGameState();
-
-  const core = useMemo(() => buildCoreSlice(state), [
+  const game = useGameState();
+  const {
     state,
-  ]);
+    loaded,
+    newTitleIds,
+    dismissNewTitles,
+    setActiveTitle,
+    enhanceableCount,
+    resetGame,
+    addCards,
+    openBooster,
+    enhanceCard,
+    mergeCards,
+    saveDeck,
+    deleteDeck,
+    setActiveDeck,
+    recordBattleResult,
+    addBoosterPack,
+    recordScenarioClear,
+  } = game;
+
+  const ownedCardIds = useMemo(
+    () => new Set(state.ownedCards.map((ownedCard) => ownedCard.cardId)),
+    [state.ownedCards],
+  );
+
+  const core = useMemo(
+    () => ({
+      state,
+      loaded,
+      newTitleIds,
+      dismissNewTitles,
+      setActiveTitle,
+      enhanceableCount,
+      resetGame,
+    }),
+    [state, loaded, newTitleIds, dismissNewTitles, setActiveTitle, enhanceableCount, resetGame],
+  );
 
   const owned = useMemo(
-    () => buildOwnedCardsSlice(state),
-    [state],
+    () => ({
+      ownedCards: state.ownedCards,
+      ownedCardIds,
+      addCards,
+      openBooster,
+      enhanceCard,
+      mergeCards,
+    }),
+    [state.ownedCards, ownedCardIds, addCards, openBooster, enhanceCard, mergeCards],
   );
 
   const decks = useMemo(
-    () => buildDeckSlice(state),
-    [state],
+    () => ({
+      decks: state.decks,
+      decksCount: state.decks.length,
+      activeDeckId: state.activeDeckId,
+      saveDeck,
+      deleteDeck,
+      setActiveDeck,
+    }),
+    [state.decks, state.activeDeckId, saveDeck, deleteDeck, setActiveDeck],
   );
 
   const battle = useMemo(
-    () => buildBattleSlice(state),
-    [state],
+    () => ({
+      recordBattleResult,
+      addBoosterPack,
+      recordScenarioClear,
+    }),
+    [recordBattleResult, addBoosterPack, recordScenarioClear],
   );
 
-  if (!state.loaded) {
+  if (!loaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-white text-lg animate-pulse">로딩 중...</div>
@@ -176,6 +185,6 @@ export function useGameStateContext() {
       addBoosterPack: battle.addBoosterPack,
       recordScenarioClear: battle.recordScenarioClear,
     }),
-    [core, deck, owned, battle]
+    [core, deck, owned, battle],
   );
 }

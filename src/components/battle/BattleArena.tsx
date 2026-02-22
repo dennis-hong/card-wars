@@ -120,7 +120,7 @@ export default function BattleArena({
   const [detailTarget, setDetailTarget] = useState<WarriorDetailTarget | null>(null);
 
   const tacticAnimRef = useRef<Record<number, TacticAnimState>>({});
-  const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const arenaRef = useRef<HTMLDivElement>(null);
   const warriorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -128,6 +128,24 @@ export default function BattleArena({
     tacticAnimRef.current = { ...tacticAnimRef.current, [idx]: state };
     setTacticAnimState((prev) => ({ ...prev, [idx]: state }));
   }, []);
+
+  const clearScheduledTimeouts = useCallback(() => {
+    timeoutIdsRef.current.forEach(clearTimeout);
+    timeoutIdsRef.current = [];
+  }, []);
+
+  const scheduleTimeout = useCallback((callback: () => void, ms: number) => {
+    const timeoutId = setTimeout(() => {
+      timeoutIdsRef.current = timeoutIdsRef.current.filter((id) => id !== timeoutId);
+      callback();
+    }, ms);
+    timeoutIdsRef.current.push(timeoutId);
+    return timeoutId;
+  }, []);
+
+  useEffect(() => {
+    return () => clearScheduledTimeouts();
+  }, [clearScheduledTimeouts]);
 
   const addLiveLog = useCallback((text: string) => {
     const entry: LiveLogEntry = {
@@ -151,22 +169,20 @@ export default function BattleArena({
   }, [liveLog.length]);
 
   useEffect(() => {
+    clearScheduledTimeouts();
     const b = initBattle(deck, ownedCards, wins, battleOptions);
     setBattle(b);
 
     setShowFieldEvent(true);
-    const t1 = setTimeout(() => setShowFieldEvent(false), DELAY.showLogMs);
+    scheduleTimeout(() => setShowFieldEvent(false), DELAY.showLogMs);
 
     if (b.activeSynergies && b.activeSynergies.length > 0) {
-      const t2 = setTimeout(() => setShowSynergy(true), DELAY.showLogMs + 200);
-      const t3 = setTimeout(() => setShowSynergy(false), DELAY.showLogMs + 1200);
-      timerRef.current.push(t2, t3);
+      scheduleTimeout(() => setShowSynergy(true), DELAY.showLogMs + 200);
+      scheduleTimeout(() => setShowSynergy(false), DELAY.showLogMs + 1200);
     }
 
-    timerRef.current.push(t1);
-    const timers = [...timerRef.current];
-    return () => timers.forEach(clearTimeout);
-  }, [battleOptions, deck, ownedCards, wins]);
+    return () => clearScheduledTimeouts();
+  }, [battleOptions, clearScheduledTimeouts, deck, ownedCards, scheduleTimeout, wins]);
 
   const showCombatEvents = useCallback((events: CombatEvent[]) => {
     const newFloats: FloatingNumber[] = [];
@@ -202,14 +218,14 @@ export default function BattleArena({
 
     if (newFloats.length > 0) {
       setFloatingNumbers(newFloats);
-      setTimeout(() => setFloatingNumbers([]), DELAY.showHitMs);
+      scheduleTimeout(() => setFloatingNumbers([]), DELAY.showHitMs);
     }
 
     if (Object.keys(newSkills).length > 0) {
       setSkillNames(newSkills);
-      setTimeout(() => setSkillNames({}), DELAY.showLogMs);
+      scheduleTimeout(() => setSkillNames({}), DELAY.showLogMs);
     }
-  }, []);
+  }, [scheduleTimeout]);
 
   const playActions = useCallback(
     async (

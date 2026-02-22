@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GameState, OwnedCard, BoosterPack, Deck, Card, Grade, MAX_LEVEL } from '@/types/game';
-import { getCardById, ALL_CARDS } from '@/data/cards';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { GameState, OwnedCard, BoosterPack, Deck, Card } from '@/types/game';
+import { ALL_CARDS } from '@/data/cards';
 import { TITLES } from '@/data/titles';
 import { generateId } from '@/lib/uuid';
 import { openPack } from '@/lib/gacha';
@@ -38,10 +38,24 @@ export function useGameState() {
   const [state, setState] = useState<GameState>(() => loadState());
   const [loaded] = useState(true);
   const [newTitleIds, setNewTitleIds] = useState<string[]>([]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Save on every change (after initial load)
+  // Batch frequent state writes to reduce localStorage churn during heavy gameplay flows.
   useEffect(() => {
-    if (loaded) saveState(state);
+    if (!loaded) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      saveState(state);
+      saveTimerRef.current = null;
+    }, 120);
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
   }, [state, loaded]);
 
   const dismissNewTitles = useCallback(() => {

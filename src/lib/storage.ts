@@ -276,13 +276,14 @@ export function loadState(): GameState {
   const parsed = parseStatePayload(window.localStorage.getItem(STORAGE_KEY));
   if (!parsed) return createInitialState();
 
+  const migrated = migrateState(parsed);
   const checksum = typeof parsed.checksum === 'string' ? parsed.checksum : '';
-  const expected = calculateChecksum(migrateState(parsed));
+  const expected = calculateChecksum(migrated);
   if (checksum && checksum !== expected) {
     return createInitialState();
   }
 
-  return migrateState(parsed);
+  return migrated;
 }
 
 export function saveState(state: GameState): void {

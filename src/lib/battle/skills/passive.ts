@@ -1,4 +1,4 @@
-import { BattleState, BattleAction, CombatEvent, BattleWarrior, BattleTactic, MAX_LEVEL } from '@/types/game';
+import { BattleState, BattleAction, CombatEvent, BattleWarrior, MAX_LEVEL } from '@/types/game';
 import { getWarriorById } from '@/data/cards';
 import { applyDamage } from '../combat';
 import { BattleRandom } from '../types';

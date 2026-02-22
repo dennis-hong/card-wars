@@ -1,7 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useMemo } from 'react';
-import { useState, useEffect } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CombatResult, Deck, MAX_LEVEL, OwnedCard } from '@/types/game';
 import { getCardById } from '@/data/cards';
 import { Card as GameCard } from '@/types/game';
@@ -25,18 +24,11 @@ import {
   RunNodeId,
   RunAct,
   RunState,
-  RunEventChoice,
-  RunShopItem,
   RunEventDefinition,
-  RunEnemyTemplate,
 } from '@/lib/roguelike/run-types';
 import { getRelicById, hasRelic as runHasRelic } from '@/lib/roguelike/relics';
 import { usePathname, useRouter } from 'next/navigation';
 
-type BattleDamageSummary = {
-  playerWarriorsAlive?: number;
-  enemyWarriorsAlive?: number;
-};
 type RunPhaseRoute = 'idle' | 'opening' | 'deck_build' | 'running' | 'reward' | 'event' | 'shop' | 'rest' | 'battle' | 'ended';
 
 interface AddCardsResult {
@@ -54,7 +46,7 @@ interface RunContextValue {
   ensureStarterComposition: () => void;
   saveDeck: (deck: Deck) => void;
   goToMap: () => void;
-  completeBattle: (result: CombatResult, summary?: BattleDamageSummary) => void;
+  completeBattle: (result: CombatResult) => void;
   chooseEvent: (choiceId: string) => void;
   selectNode: (nodeId: RunNodeId) => boolean;
   goHome: () => void;
@@ -137,12 +129,34 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     return loaded ?? createEmptyRunState();
   });
   const [loaded] = useState(true);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ensureStarterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (loaded) {
-      saveRunState(state);
+    if (!loaded) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
     }
+    saveTimerRef.current = setTimeout(() => {
+      saveRunState(state);
+      saveTimerRef.current = null;
+    }, 120);
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
   }, [loaded, state]);
+
+  useEffect(() => {
+    return () => {
+      if (ensureStarterTimerRef.current) {
+        clearTimeout(ensureStarterTimerRef.current);
+        ensureStarterTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const addRunCards = useCallback(
     (cards: Card[]): AddCardsResult => {
@@ -273,18 +287,19 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
 
   const openStarterPack = useCallback(
     (packId: string) => {
-      if (state.phase !== 'opening' && state.phase !== 'deck_build') return null;
-      const pack = state.openedStarterPacks.find((item) => item.id === packId);
-      if (!pack || pack.opened) return null;
-
-      const cards = openPack('normal');
-      addRunCards(cards);
-
+      let cards: Card[] | null = null;
+      let shouldEnsureStarter = false;
       setState((prev) => {
+        if (prev.phase !== 'opening' && prev.phase !== 'deck_build') return prev;
+        const pack = prev.openedStarterPacks.find((item) => item.id === packId);
+        if (!pack || pack.opened) return prev;
+
+        cards = openPack('normal');
         const packs = prev.openedStarterPacks.map((item) =>
           item.id === packId ? { ...item, opened: true } : item
         );
         const nextPhase = packs.every((item) => item.opened) ? 'deck_build' : 'opening';
+        shouldEnsureStarter = packs.every((item) => item.opened);
         return {
           ...prev,
           openedStarterPacks: packs,
@@ -293,15 +308,22 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         };
       });
 
-      // All packs opened → ensure safety net (min 3 warriors + 2 tactics)
-      if (state.openedStarterPacks.every((item) => item.opened || item.id === packId)) {
-        // Safety net runs on next tick after state updates
-        setTimeout(() => ensureStarterComposition(), 100);
+      if (!cards) return null;
+      addRunCards(cards);
+
+      if (shouldEnsureStarter) {
+        if (ensureStarterTimerRef.current) {
+          clearTimeout(ensureStarterTimerRef.current);
+        }
+        ensureStarterTimerRef.current = setTimeout(() => {
+          ensureStarterComposition();
+          ensureStarterTimerRef.current = null;
+        }, 100);
       }
 
       return cards;
     },
-    [addRunCards, router, state.openedStarterPacks, state.phase, state.deck, state, ensureStarterComposition]
+    [addRunCards, ensureStarterComposition]
   );
 
   const saveDeck = useCallback((deck: Deck) => {
@@ -435,13 +457,6 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     return true;
   }, [isReachableNode, state.map, state.currentNodeId, state.visitedNodes]);
 
-  const getEnemyForNode = useCallback((nodeId: RunNodeId): RunEnemyTemplate | null => {
-    if (!state.map) return null;
-    const node = getNodeById(state.map, nodeId);
-    if (!node || (node.type !== 'battle' && node.type !== 'elite' && node.type !== 'boss')) return null;
-    return node.enemy ?? getEnemyTemplate(state.currentAct || 1, node.type);
-  }, [state.currentAct, state.map]);
-
   const grantRelic = useCallback((relicId: string, replaceRelicId?: string): boolean => {
     if (!getRelicById(relicId)) return false;
     let success = false;
@@ -485,7 +500,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
     return success;
   }, []);
 
-  const completeBattle = useCallback((result: CombatResult, _summary?: BattleDamageSummary) => {
+  const completeBattle = useCallback((result: CombatResult) => {
     if (!state.currentNodeId || !state.map || !state.currentAct) return;
     const node = getNodeById(state.map, state.currentNodeId);
     if (!node || (node.type !== 'battle' && node.type !== 'elite' && node.type !== 'boss')) return;
@@ -670,7 +685,7 @@ export function RunContextProvider({ children }: { children: ReactNode }) {
         }
 
         if (item.type === 'remove') {
-          const target = removeInstanceId || next.inventory.find((owned) => true)?.instanceId;
+          const target = removeInstanceId || next.inventory[0]?.instanceId;
           if (!target) return prev;
           next.inventory = next.inventory.filter((owned) => owned.instanceId !== target);
           next.deck = {

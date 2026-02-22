@@ -77,14 +77,13 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
   const hasMap = Boolean(state.map);
   const map = state.map ?? FALLBACK_MAP;
 
-  const visited = new Set(state.visitedNodes);
+  const visited = useMemo(() => new Set(state.visitedNodes), [state.visitedNodes]);
   const currentFloorIndex = useMemo(
     () => getCurrentFloorIndex(map, state.currentNodeId),
     [map, state.currentNodeId],
   );
 
   const isCurrent = (nodeId: RunNodeId) => nodeId === state.currentNodeId;
-  const isVisited = (nodeId: RunNodeId) => visited.has(nodeId);
 
   const floorNodes = useMemo(() => {
     return Array.from({ length: map.columns }, (_, floor) =>
@@ -127,7 +126,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
         if (!from || !to) return null;
 
         const activePath = selectableNodes.has(edge.to) || selectableNodes.has(edge.from);
-        const visitedPath = isVisited(edge.from) && isVisited(edge.to);
+        const visitedPath = visited.has(edge.from) && visited.has(edge.to);
 
         const style: PathData['style'] = activePath ? 'active' : visitedPath ? 'visited' : 'default';
 
@@ -135,7 +134,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
           style === 'active'
             ? 'rgba(250, 204, 21, 0.95)'
             : style === 'visited'
-              ? isVisited(edge.to)
+              ? visited.has(edge.to)
                 ? 'rgba(52, 211, 153, 0.95)'
                 : 'rgba(148, 163, 184, 0.45)'
               : 'rgba(148, 163, 184, 0.35)';
@@ -147,7 +146,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
         return { d, stroke, width, style };
       })
       .filter((item): item is PathData => item !== null);
-  }, [map.edges, nodeLookup, isVisited, selectableNodes]);
+  }, [map.edges, nodeLookup, selectableNodes, visited]);
 
   const mapHeight = Math.max(420, TOP_PADDING + (map.columns - 1) * FLOOR_SPACING + BOTTOM_PADDING);
 
@@ -171,7 +170,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
     }
     const currentY = TOP_PADDING + (map.columns - 1 - currentFloorIndex) * FLOOR_SPACING;
     const target = Math.max(0, currentY - 240);
-      mapRef.current.scrollTo({ top: target, behavior: 'smooth' });
+    mapRef.current.scrollTo({ top: target, behavior: 'smooth' });
   }, [currentFloorIndex, map.columns]);
 
   if (!hasMap) {
@@ -226,7 +225,7 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
 
               {nodes.map((node) => {
                 const isSelectable = selectableNodes.has(node.id);
-                const reached = isVisited(node.id);
+                const reached = visited.has(node.id);
                 const current = isCurrent(node.id);
                 const isBoss = map.bossNodeId === node.id || node.type === 'boss';
                 const isLocked = !isSelectable && !reached && !current;
@@ -288,18 +287,18 @@ export default function RunMap({ state, selectableNodes, onSelect }: Props) {
                 );
               })}
 
-            {nodes.map((node) => (
-              <div
-                key={`label-${node.id}`}
-                className="absolute -bottom-7 w-20 text-center text-[11px] font-semibold text-gray-100"
-                style={{
-                  left: node.x - 40,
-                  top: floorY + (node.id === map.bossNodeId || node.type === 'boss' ? 44 : 36),
-                }}
-              >
-                {NODE_LABELS[node.type] ?? node.type}
-              </div>
-            ))}
+              {nodes.map((node) => (
+                <div
+                  key={`label-${node.id}`}
+                  className="absolute -bottom-7 w-20 text-center text-[11px] font-semibold text-gray-100"
+                  style={{
+                    left: node.x - 40,
+                    top: floorY + (node.id === map.bossNodeId || node.type === 'boss' ? 44 : 36),
+                  }}
+                >
+                  {NODE_LABELS[node.type] ?? node.type}
+                </div>
+              ))}
             </div>
           );
         })}

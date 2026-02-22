@@ -13,7 +13,6 @@ import {
 } from '@/types/game';
 import { getRandomEvent, BATTLEFIELD_EVENTS } from '@/data/battlefield-events';
 import { getWarriorById } from '@/data/cards';
-import { generateId } from '@/lib/uuid';
 import { randomPick } from '@/lib/rng';
 import { BattleRandom, BattleEngineOptions } from './types';
 import { applyBattleStartSkills } from './skills/passive';

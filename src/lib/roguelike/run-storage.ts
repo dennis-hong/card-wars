@@ -530,12 +530,13 @@ export function loadRunState(): RunState | null {
   if (!raw) return null;
 
   try {
-    const parsed = JSON.parse(raw) as { version?: unknown; state?: unknown };
+    const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
-    if (parsed.version && parsed.version !== STORAGE_VERSION && typeof parsed.version !== 'number') {
-      return sanitizeRunState(parsed.state);
-    }
-    return sanitizeRunState(parsed.state);
+    const envelope = parsed as { version?: unknown; state?: unknown };
+    const payload = Object.prototype.hasOwnProperty.call(envelope, 'state')
+      ? envelope.state
+      : envelope;
+    return sanitizeRunState(payload);
   } catch {
     return null;
   }

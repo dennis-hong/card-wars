@@ -2,11 +2,31 @@
 // Sound Effects - ElevenLabs generated MP3s
 // ============================================================
 
+const audioCache = new Map<string, HTMLAudioElement>();
+
+function getCachedAudio(path: string): HTMLAudioElement {
+  const cached = audioCache.get(path);
+  if (cached) return cached;
+  const audio = new Audio(path);
+  audio.preload = 'auto';
+  audioCache.set(path, audio);
+  return audio;
+}
+
 function play(path: string, volume = 0.7) {
   try {
-    const audio = new Audio(path);
-    audio.volume = volume;
-    audio.play().catch(() => {});
+    const base = getCachedAudio(path);
+    if (base.paused) {
+      base.currentTime = 0;
+      base.volume = volume;
+      base.play().catch(() => {});
+      return;
+    }
+
+    // Allow overlapping plays while keeping a warmed-up base instance.
+    const layered = base.cloneNode(true) as HTMLAudioElement;
+    layered.volume = volume;
+    layered.play().catch(() => {});
   } catch {
     // silent fail
   }
