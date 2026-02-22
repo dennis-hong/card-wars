@@ -4,10 +4,18 @@ import { WarriorCard, GRADE_LABELS, GRADE_COLORS, FACTION_COLORS, BaseCardViewPr
 import Image from 'next/image';
 import { getWarriorImage } from '@/lib/warrior-images';
 import { useState } from 'react';
+import { motion, useMotionValue, useSpring } from 'motion/react';
 
 interface Props extends BaseCardViewProps {
   card: WarriorCard;
   showDetails?: boolean;
+}
+
+function getDepthShadow(grade: WarriorCard['grade']) {
+  if (grade === 4) return '0 22px 44px rgba(251,191,36,0.28), 0 4px 14px rgba(15,23,42,0.68)';
+  if (grade === 3) return '0 20px 38px rgba(168,85,247,0.22), 0 4px 12px rgba(15,23,42,0.62)';
+  if (grade === 2) return '0 16px 30px rgba(59,130,246,0.18), 0 3px 10px rgba(15,23,42,0.58)';
+  return '0 14px 26px rgba(15,23,42,0.52)';
 }
 
 export default function WarriorCardView({ card, owned, size = 'md', onClick, selected, showDetails, duplicateCount }: Props) {
@@ -18,47 +26,78 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
   const portraitSrc = getWarriorImage(card.id);
   const [imgError, setImgError] = useState(false);
 
+  const rotateX = useMotionValue(0);
+  const rotateY = useMotionValue(0);
+  const springRotateX = useSpring(rotateX, { stiffness: 240, damping: 20, mass: 0.45 });
+  const springRotateY = useSpring(rotateY, { stiffness: 240, damping: 20, mass: 0.45 });
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / rect.width;
+    const py = (event.clientY - rect.top) / rect.height;
+    rotateY.set((px - 0.5) * 11);
+    rotateX.set((0.5 - py) * 11);
+  };
+
+  const resetTilt = () => {
+    rotateX.set(0);
+    rotateY.set(0);
+  };
+
+  const rarityGlowClass = card.grade === 4 ? 'rarity-glow-sss' : card.grade === 3 ? 'rarity-glow-ss' : card.grade === 2 ? 'rarity-glow-s' : '';
+
   return (
-    <div
+    <motion.div
       onClick={onClick}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={resetTilt}
       className={`
-        relative rounded-lg overflow-hidden cursor-pointer select-none
-        transition-all duration-200 active:scale-95
+        relative rounded-lg overflow-hidden select-none
         ${CARD_SIZE_CLASSES[size]}
-        ${selected ? 'ring-2 ring-yellow-400 scale-105' : 'hover:scale-105'}
-        ${isLegend ? 'shadow-[0_0_20px_rgba(255,170,0,0.5)]' : isHero ? 'shadow-[0_0_12px_rgba(170,68,255,0.4)]' : 'shadow-lg'}
+        ${onClick ? 'cursor-pointer' : 'cursor-default'}
+        ${selected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#071635]' : ''}
+        ${rarityGlowClass}
       `}
+      whileHover={{ scale: selected ? 1.06 : 1.04, y: -5 }}
+      whileTap={{ scale: 0.96, rotateX: 0, rotateY: 0 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 22, mass: 0.8 }}
       style={{
-        background: `linear-gradient(135deg, ${factionColor}22, ${gradeColor}44)`,
+        rotateX: springRotateX,
+        rotateY: springRotateY,
+        transformPerspective: 920,
+        transformStyle: 'preserve-3d',
+        background: `linear-gradient(150deg, ${factionColor}1a 0%, ${gradeColor}3d 45%, rgba(6,13,34,0.95) 100%)`,
         border: `2px solid ${gradeColor}`,
+        boxShadow: getDepthShadow(card.grade),
       }}
     >
-      {/* Grade glow for legendary */}
       {isLegend && (
-        <div className="absolute inset-0 animate-pulse opacity-20 pointer-events-none" style={{
-          background: `radial-gradient(circle, ${gradeColor}, transparent)`,
-        }} />
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(circle at 50% 40%, ${gradeColor}55, transparent 70%)`,
+          }}
+          animate={{ opacity: [0.2, 0.5, 0.2], scale: [1, 1.05, 1] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        />
       )}
 
-      {/* Duplicate count badge */}
       {duplicateCount !== undefined && duplicateCount > 0 && (
         <div className="absolute -top-1 -right-1 z-10 bg-purple-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 border-2 border-purple-400 shadow-lg shadow-purple-500/30">
           x{duplicateCount + 1}
         </div>
       )}
 
-      {/* Header */}
       <div className="relative p-1.5 text-center" style={{ background: `${gradeColor}33` }}>
-        <div className={`font-bold text-white truncate ${size === 'lg' ? 'text-lg' : size === 'md' ? 'text-base' : ''}`}>{card.name}</div>
+        <div className={`font-bold text-white truncate ${size === 'lg' ? 'text-lg' : size === 'md' ? 'text-base' : 'text-xs'}`}>{card.name}</div>
         <div className="flex justify-between items-center px-1">
           <span className="opacity-80" style={{ color: factionColor }}>{card.faction}</span>
           <span>{GRADE_LABELS[card.grade]}</span>
         </div>
       </div>
 
-      {/* Portrait */}
       <div
-        className={`relative mx-2 mt-1 rounded overflow-hidden bg-black/30 flex items-center justify-center ${
+        className={`relative mx-2 mt-1 rounded overflow-hidden bg-black/35 flex items-center justify-center ${
           size === 'sm' ? 'h-[58px]' : size === 'md' ? 'h-[88px]' : 'h-[164px]'
         }`}
       >
@@ -74,14 +113,23 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
         ) : (
           <span className={size === 'sm' ? 'text-3xl' : 'text-4xl'}>{card.grade === 4 ? '🌟' : '⚔️'}</span>
         )}
-        {/* Grade overlay shimmer for hero+ */}
+
         {isHero && (
-          <div className="absolute inset-0 pointer-events-none opacity-30" style={{
-            background: `linear-gradient(135deg, transparent 40%, ${gradeColor}66 50%, transparent 60%)`,
-            backgroundSize: '200% 200%',
-            animation: 'cardShimmer 3s ease-in-out infinite',
-          }} />
+          <motion.div
+            className={`absolute inset-0 pointer-events-none ${card.grade >= 3 ? 'holo-foil' : ''}`}
+            style={{
+              opacity: card.grade === 4 ? 0.6 : 0.42,
+              backgroundImage:
+                card.grade === 4
+                  ? 'linear-gradient(125deg, transparent 12%, rgba(255,190,43,0.45) 44%, rgba(255,255,255,0.2) 51%, rgba(255,190,43,0.35) 60%, transparent 86%)'
+                  : 'linear-gradient(125deg, transparent 15%, rgba(168,85,247,0.35) 45%, rgba(255,255,255,0.16) 52%, rgba(59,130,246,0.28) 62%, transparent 86%)',
+              backgroundSize: '220% 220%',
+            }}
+            animate={{ backgroundPosition: ['-130% -130%', '130% 130%'] }}
+            transition={{ duration: card.grade === 4 ? 2.1 : 2.8, repeat: Infinity, ease: 'linear' }}
+          />
         )}
+
         {owned && (
           <div className={`absolute top-0.5 right-0.5 bg-black/70 text-yellow-400 px-1 rounded ${size === 'sm' ? 'text-[9px]' : 'text-xs font-bold'}`}>
             Lv.{owned.level}
@@ -89,15 +137,14 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
         )}
       </div>
 
-      {/* Stats */}
       {(() => {
         const lvlBonus = (owned?.level || 1) - 1;
         const defBonus = Math.floor(lvlBonus * 0.5);
         const stats = [
-          { key: 'attack' as const, label: '무', labelLong: '무력', color: 'red', bonus: lvlBonus },
-          { key: 'command' as const, label: '통', labelLong: '통솔', color: 'green', bonus: lvlBonus },
-          { key: 'intel' as const, label: '지', labelLong: '지력', color: 'blue', bonus: lvlBonus },
-          { key: 'defense' as const, label: '방', labelLong: '방어', color: 'yellow', bonus: defBonus },
+          { key: 'attack' as const, label: '무', color: 'red', bonus: lvlBonus },
+          { key: 'command' as const, label: '통', color: 'green', bonus: lvlBonus },
+          { key: 'intel' as const, label: '지', color: 'blue', bonus: lvlBonus },
+          { key: 'defense' as const, label: '방', color: 'yellow', bonus: defBonus },
         ];
 
         if (size === 'lg') return null;
@@ -132,7 +179,6 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
         );
       })()}
 
-      {/* Skills (only in detail mode) */}
       {showDetails && card.skills.length > 0 && size !== 'sm' && (
         <div className={`px-1.5 mt-1 space-y-0.5 ${size === 'lg' ? 'mt-2' : ''}`}>
           {card.skills.map((s) => (
@@ -145,6 +191,6 @@ export default function WarriorCardView({ card, owned, size = 'md', onClick, sel
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

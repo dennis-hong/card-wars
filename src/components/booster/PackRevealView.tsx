@@ -17,7 +17,7 @@ interface CardRevealSlotProps {
 }
 
 function seeded(seed: number) {
-  const x = Math.sin(seed) * 10000;
+  const x = Math.sin(seed * 81.31) * 10000;
   return x - Math.floor(x);
 }
 
@@ -31,7 +31,9 @@ function CardRevealSlot({
 }: CardRevealSlotProps) {
   const cardData = getCardById(card.id);
   const tone = BOOSTER_ANIMATION_PRESETS.cardGradeTone[card.grade];
-  const isHeroOrHigher = card.grade >= 3;
+  const isRareOrHigher = card.grade >= 2;
+  const isSSOrHigher = card.grade >= 3;
+  const isLegendary = card.grade === 4;
 
   if (!cardData) return null;
 
@@ -44,125 +46,146 @@ function CardRevealSlot({
     >
       <motion.div
         className="relative cursor-pointer"
-        style={{ width: compact ? 136 : 160, height: compact ? 194 : 224 }}
+        style={{ width: compact ? 136 : 160, height: compact ? 194 : 224, perspective: 1200 }}
         onClick={() => !revealed && onReveal(index)}
-        whileHover={!revealed ? { y: -5 } : undefined}
+        whileHover={!revealed ? { y: -6, scale: 1.02 } : { y: -2 }}
+        whileTap={!revealed ? { scale: 0.96 } : undefined}
       >
-        <AnimatePresence mode="wait">
-          {!revealed ? (
+        <motion.div
+          className="relative h-full w-full"
+          style={{ transformStyle: 'preserve-3d' }}
+          animate={{ rotateY: revealed ? 180 : 0 }}
+          transition={{ type: 'spring', stiffness: 250, damping: 24, mass: 0.92 }}
+        >
+          <div
+            className="absolute inset-0 rounded-xl border border-amber-700/70 overflow-hidden"
+            style={{
+              background: 'linear-gradient(155deg, #1f1309, #432615 55%, #1f1309)',
+              backfaceVisibility: 'hidden',
+              transform: 'rotateY(0deg)',
+            }}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_14%,rgba(255,255,255,0.16),transparent_42%),radial-gradient(circle_at_82%_86%,rgba(255,255,255,0.08),transparent_46%)]" />
+            <div className="absolute inset-0 flex items-center justify-center text-amber-300/80 text-2xl font-black tracking-[0.35em]">CW</div>
             <motion.div
-              key="back"
-              className="absolute inset-0 rounded-xl border border-amber-700/70 overflow-hidden"
+              className="absolute -inset-y-6 w-14"
               style={{
-                background: 'linear-gradient(155deg, #1f1309, #432615 55%, #1f1309)',
+                background: 'linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.2) 50%, transparent 75%)',
               }}
-              initial={{ opacity: 1, rotateY: 0 }}
-              exit={{ opacity: 0, rotateY: -90, scale: 0.96 }}
-              transition={{ duration: 0.32, ease: 'easeInOut' }}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_14%,rgba(255,255,255,0.16),transparent_42%),radial-gradient(circle_at_82%_86%,rgba(255,255,255,0.08),transparent_46%)]" />
-              <div className="absolute inset-0 flex items-center justify-center text-amber-300/80 text-2xl font-black tracking-[0.35em]">CW</div>
-              <motion.div
-                className="absolute -inset-y-6 w-14"
-                style={{
-                  background: 'linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.2) 50%, transparent 75%)',
-                }}
-                animate={{ x: ['-120%', '180%'] }}
-                transition={{ duration: 2.1, repeat: Infinity, ease: 'linear' }}
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="front"
-              className="absolute inset-0"
-              initial={{ opacity: 0, rotateY: 90, scale: 0.96 }}
-              animate={{
+              animate={{ x: ['-120%', '180%'] }}
+              transition={{ duration: 2.1, repeat: Infinity, ease: 'linear' }}
+            />
+          </div>
+
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: 'rotateY(180deg)',
+              backfaceVisibility: 'hidden',
+            }}
+          >
+            <div
+              className="absolute -inset-2 rounded-2xl pointer-events-none"
+              style={{
+                background: isRareOrHigher
+                  ? 'radial-gradient(circle, rgba(250,204,21,0.62) 0%, rgba(250,204,21,0.22) 40%, transparent 70%)'
+                  : `radial-gradient(circle, ${tone}55 0%, transparent 70%)`,
+                filter: 'blur(10px)',
                 opacity: 1,
-                rotateY: 0,
-                scale: card.grade >= 3 ? [1, 1.04, 1] : 1,
               }}
-              transition={{ duration: 0.38, ease: 'easeOut' }}
-            >
-              <div
-                className="absolute -inset-2 rounded-2xl pointer-events-none"
+            />
+
+            <motion.div
+              className="absolute -inset-1 rounded-2xl pointer-events-none"
+              style={{
+                border: isRareOrHigher ? '1px solid rgba(250, 204, 21, 0.75)' : `1px solid ${tone}`,
+                boxShadow: isRareOrHigher
+                  ? '0 0 24px rgba(250,204,21,0.55), 0 0 36px rgba(245,158,11,0.34)'
+                  : `0 0 20px ${tone}70`,
+              }}
+              initial={{ opacity: 0, scale: 0.88 }}
+              animate={{ opacity: [0.25, 1, 0.35], scale: [0.88, 1.03, 1] }}
+              transition={{ duration: isLegendary ? 1.1 : 0.8, ease: 'easeOut' }}
+            />
+
+            <div className="relative rounded-lg overflow-hidden">
+              {cardData.type === 'warrior' ? (
+                <WarriorCardView card={cardData} size="md" showDetails />
+              ) : (
+                <TacticCardView card={cardData} size="md" />
+              )}
+
+              <motion.div
+                className="absolute inset-0 pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 style={{
-                  background: `radial-gradient(circle, ${tone}70 0%, transparent 70%)`,
-                  filter: 'blur(10px)',
-                  opacity: 1,
+                  background: isRareOrHigher
+                    ? 'linear-gradient(135deg, transparent 0%, rgba(250,204,21,0.12) 40%, transparent 100%)'
+                    : 'linear-gradient(135deg, transparent 0%, rgba(148,163,184,0.15) 50%, transparent 100%)',
+                  mixBlendMode: 'screen',
                 }}
               />
 
-              <div className="relative rounded-lg overflow-hidden">
-                {cardData.type === 'warrior' ? (
-                  <WarriorCardView card={cardData} size="md" showDetails />
-                ) : (
-                  <TacticCardView card={cardData} size="md" />
-                )}
+              {isSSOrHigher && (
+                <motion.div
+                  className="absolute inset-0 pointer-events-none holo-foil"
+                  style={{ opacity: isLegendary ? 0.65 : 0.45 }}
+                  animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                  transition={{ duration: isLegendary ? 1.8 : 2.4, repeat: Infinity, ease: 'linear' }}
+                />
+              )}
 
+              {isSSOrHigher && (
                 <motion.div
                   className="absolute inset-0 pointer-events-none"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
                   style={{
-                    background: isHeroOrHigher
-                      ? `linear-gradient(135deg, transparent 0%, ${tone}22 40%, transparent 100%)`
-                      : 'linear-gradient(135deg, transparent 0%, rgba(148,163,184,0.15) 50%, transparent 100%)',
+                    background: isLegendary
+                      ? 'conic-gradient(from 180deg, rgba(255,177,0,0.00), rgba(255,177,0,0.58), rgba(255,255,255,0.00), rgba(255,177,0,0.48), rgba(255,177,0,0.00))'
+                      : 'conic-gradient(from 180deg, rgba(168,85,247,0.00), rgba(168,85,247,0.48), rgba(255,255,255,0.00), rgba(99,102,241,0.40), rgba(168,85,247,0.00))',
                     mixBlendMode: 'screen',
                   }}
+                  initial={{ opacity: 0, rotate: 0 }}
+                  animate={{ opacity: [0.2, 0.8, 0.35], rotate: [0, 50, 110] }}
+                  transition={{ duration: isLegendary ? 1.15 : 0.9, ease: 'easeOut' }}
                 />
-
-                {card.grade >= 3 && (
-                  <motion.div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{
-                      background:
-                        card.grade === 4
-                          ? 'conic-gradient(from 180deg, rgba(255,177,0,0.00), rgba(255,177,0,0.55), rgba(255,255,255,0.00), rgba(255,177,0,0.45), rgba(255,177,0,0.00))'
-                          : 'conic-gradient(from 180deg, rgba(168,85,247,0.00), rgba(168,85,247,0.48), rgba(255,255,255,0.00), rgba(99,102,241,0.40), rgba(168,85,247,0.00))',
-                      mixBlendMode: 'screen',
-                    }}
-                    initial={{ opacity: 0, rotate: 0 }}
-                    animate={{ opacity: [0.2, 0.8, 0.35], rotate: [0, 50, 110] }}
-                    transition={{ duration: card.grade === 4 ? 1.15 : 0.9, ease: 'easeOut' }}
-                  />
-                )}
-              </div>
-
-              <motion.div
-                className="absolute left-2 bottom-2 px-2 py-1 rounded-full text-[10px] font-black tracking-wider"
-                style={{ color: '#fff', background: `${tone}dd` }}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {BOOSTER_ANIMATION_PRESETS.gradeLabel[card.grade]}
-              </motion.div>
-
-              {card.grade === 4 && (
-                <div className="absolute inset-0 pointer-events-none">
-                  {Array.from({ length: 16 }).map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute left-1/2 top-1/2 rounded-full"
-                      style={{
-                        width: 4,
-                        height: 4,
-                        background: i % 2 ? '#fff7d0' : '#ffb100',
-                      }}
-                      initial={{ x: 0, y: 0, opacity: 0 }}
-                      animate={{
-                        x: (seeded(i + 11) - 0.5) * 170,
-                        y: (seeded(i + 151) - 0.5) * 220,
-                        scale: [1, 1.25, 0.7],
-                        opacity: [0, 0.9, 0],
-                      }}
-                      transition={{ duration: 0.95, delay: i * 0.012, ease: 'easeOut' }}
-                    />
-                  ))}
-                </div>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="absolute left-2 bottom-2 px-2 py-1 rounded-full text-[10px] font-black tracking-wider"
+          style={{ color: '#fff', background: `${tone}dd` }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: revealed ? 1 : 0, y: revealed ? 0 : 8 }}
+        >
+          {BOOSTER_ANIMATION_PRESETS.gradeLabel[card.grade]}
+        </motion.div>
+
+        {isLegendary && revealed && (
+          <div className="absolute inset-0 pointer-events-none">
+            {Array.from({ length: 18 }).map((_, i) => (
+              <motion.div
+                key={i}
+                className="absolute left-1/2 top-1/2 rounded-full"
+                style={{
+                  width: 4,
+                  height: 4,
+                  background: i % 2 ? '#fff7d0' : '#ffb100',
+                }}
+                initial={{ x: 0, y: 0, opacity: 0 }}
+                animate={{
+                  x: (seeded(i + 11) - 0.5) * 170,
+                  y: (seeded(i + 151) - 0.5) * 220,
+                  scale: [1, 1.25, 0.7],
+                  opacity: [0, 0.9, 0],
+                }}
+                transition={{ duration: 0.95, delay: i * 0.012, ease: 'easeOut' }}
+              />
+            ))}
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -213,7 +236,7 @@ export default function PackRevealView({
           <motion.div
             className="absolute inset-0 pointer-events-none bg-black"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.4 }}
+            animate={{ opacity: 0.45 }}
             exit={{ opacity: 0 }}
           />
         )}
@@ -253,7 +276,7 @@ export default function PackRevealView({
             onClick={onRevealAll}
             className="ui-btn px-6 py-2.5 rounded-xl text-sm font-bold text-white border border-white/20 bg-white/10 backdrop-blur-sm"
             whileHover={{ y: -2, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileTap={{ scale: 0.93 }}
           >
             {revealAllMode ? '전체 공개 완료' : '전체 공개'}
           </motion.button>

@@ -6,6 +6,7 @@ import { getWarriorById } from '@/data/cards';
 import { useGameStateContext } from '@/context/GameStateContext';
 import BattleArena from '@/components/battle/BattleArena';
 import { Deck } from '@/types/game';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 
 export default function BattlePage() {
   const router = useRouter();
@@ -30,11 +31,7 @@ export default function BattlePage() {
   }, [activeDeck, state.ownedCards]);
 
   if (!loaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-white text-lg animate-pulse">로딩 중...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!activeDeck || validWarriorCount < 3) {

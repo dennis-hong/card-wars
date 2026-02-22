@@ -3,6 +3,7 @@
 import { createContext, useContext, ReactNode, useMemo } from 'react';
 import { useGameState } from '@/hooks/useGameState';
 import { BoosterPack, GameState } from '@/types/game';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 
 type GameStateHook = ReturnType<typeof useGameState>;
 type CoreSlice = Pick<
@@ -102,11 +103,7 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
   );
 
   if (!loaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-white text-lg animate-pulse">로딩 중...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (

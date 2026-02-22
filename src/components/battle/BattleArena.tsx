@@ -1,6 +1,7 @@
 'use client';
 
 import { CSSProperties, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { AnimatePresence, motion, useAnimationControls } from 'motion/react';
 import { BattleState, BattleAction, Deck, OwnedCard, CombatEvent, BattleWarrior } from '@/types/game';
 import { getWarriorById, getTacticById } from '@/data/cards';
 import { initBattle, applyTactic, resolveCombat, selectAITactic } from '@/lib/battle-engine';
@@ -112,7 +113,9 @@ export default function BattleArena({
   const [turnAnnounce, setTurnAnnounce] = useState<string | null>(null);
   const [tacticAnnounce, setTacticAnnounce] = useState<{ name: string; cardId: string; side: 'player' | 'enemy' } | null>(null);
   const [liveLog, setLiveLog] = useState<LiveLogEntry[]>([]);
-  const [slashEffect, setSlashEffect] = useState<{ style: CSSProperties; side: 'player' | 'enemy' } | null>(null);
+  const [slashEffect, setSlashEffect] = useState<{ style: CSSProperties; side: 'player' | 'enemy'; critical: boolean } | null>(null);
+  const [criticalHits, setCriticalHits] = useState<Set<string>>(new Set());
+  const [criticalFlash, setCriticalFlash] = useState(false);
   const [tacticAnimState, setTacticAnimState] = useState<Record<number, TacticAnimState>>({});
   const [forecastLines, setForecastLines] = useState<ForecastLine[]>([]);
   const [forecastMarkers, setForecastMarkers] = useState<ForecastMarker[]>([]);
@@ -123,6 +126,7 @@ export default function BattleArena({
   const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const arenaRef = useRef<HTMLDivElement>(null);
   const warriorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const arenaShakeControls = useAnimationControls();
 
   const setTacticAnim = useCallback((idx: number, state: TacticAnimState) => {
     tacticAnimRef.current = { ...tacticAnimRef.current, [idx]: state };
@@ -142,6 +146,18 @@ export default function BattleArena({
     timeoutIdsRef.current.push(timeoutId);
     return timeoutId;
   }, []);
+
+  const triggerCriticalImpact = useCallback((targetId: string) => {
+    setCriticalHits(new Set([targetId]));
+    setCriticalFlash(true);
+    void arenaShakeControls.start({
+      x: [0, -9, 9, -7, 7, -4, 4, 0],
+      y: [0, -3, 3, -2, 2, 0, 0, 0],
+      transition: { duration: 0.4, ease: 'easeOut' },
+    });
+    scheduleTimeout(() => setCriticalHits(new Set()), 420);
+    scheduleTimeout(() => setCriticalFlash(false), 180);
+  }, [arenaShakeControls, scheduleTimeout]);
 
   useEffect(() => {
     return () => clearScheduledTimeouts();
@@ -175,6 +191,8 @@ export default function BattleArena({
 
     setShowFieldEvent(true);
     scheduleTimeout(() => setShowFieldEvent(false), DELAY.showLogMs);
+    setCriticalHits(new Set());
+    setCriticalFlash(false);
 
     if (b.activeSynergies && b.activeSynergies.length > 0) {
       scheduleTimeout(() => setShowSynergy(true), DELAY.showLogMs + 200);
@@ -316,6 +334,16 @@ export default function BattleArena({
             SFX.attack();
             await delay(DELAY.showOverheadMs);
 
+            const maxDamage = action.events.reduce((max, ev) => {
+              if (ev.type !== 'damage' || !ev.value) return max;
+              return Math.max(max, ev.value);
+            }, 0);
+            const targetSnapshot = allWarriors.find((w) => w.instanceId === action.targetId);
+            const criticalThreshold = targetSnapshot
+              ? Math.max(9, Math.ceil(targetSnapshot.maxHp * 0.35))
+              : 9;
+            const isCriticalHit = maxDamage > 0 && maxDamage >= criticalThreshold;
+
             const attackerEl = warriorRefs.current.get(action.attackerId);
             const targetEl = warriorRefs.current.get(action.targetId);
             if (attackerEl && targetEl) {
@@ -331,17 +359,22 @@ export default function BattleArena({
               const angle = Math.atan2(dy, dx) * (180 / Math.PI);
               setSlashEffect({
                 side: action.side,
+                critical: isCriticalHit,
                 style: {
                   position: 'fixed',
                   left: startX,
                   top: startY,
                   width: dist,
-                  height: 3,
+                  height: isCriticalHit ? 4 : 3,
                   transformOrigin: '0 50%',
                   transform: `rotate(${angle}deg)`,
                   zIndex: 40,
                 },
               });
+            }
+
+            if (isCriticalHit) {
+              triggerCriticalImpact(action.targetId);
             }
 
             await delay(DELAY.showSlashMs);
@@ -385,6 +418,7 @@ export default function BattleArena({
             setAttackingId(null);
             setHitId(null);
             setSlashEffect(null);
+            setCriticalHits(new Set());
             setSkillNames({});
             setSkillBanner(null);
             await delay(DELAY.clearStateMs);
@@ -427,7 +461,7 @@ export default function BattleArena({
           }
         }
       }
-    }, [setTacticAnim, showCombatEvents, addLiveLog]
+    }, [setTacticAnim, showCombatEvents, addLiveLog, triggerCriticalImpact]
   );
 
   const handleSelectTactic = useCallback((index: number) => {
@@ -721,7 +755,7 @@ export default function BattleArena({
   }
 
   return (
-    <div
+    <motion.div
       ref={arenaRef}
       className="min-h-screen p-4 relative overflow-hidden"
       style={{
@@ -729,12 +763,26 @@ export default function BattleArena({
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
+      animate={arenaShakeControls}
     >
       <BattleAnimationStyles />
 
       <div className="absolute inset-0 bg-black/30 pointer-events-none z-0" />
 
-      {slashEffect && <SlashEffect style={slashEffect.style} side={slashEffect.side} />}
+      {slashEffect && <SlashEffect style={slashEffect.style} side={slashEffect.side} critical={slashEffect.critical} />}
+
+      <AnimatePresence>
+        {criticalFlash && (
+          <motion.div
+            className="pointer-events-none absolute inset-0 z-[5]"
+            style={{ background: 'radial-gradient(circle at center, rgba(250,204,21,0.25), transparent 62%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+          />
+        )}
+      </AnimatePresence>
 
       <BattleOverlays
         battle={battle}
@@ -849,6 +897,7 @@ export default function BattleArena({
                 isPlayer={false}
                 isAttacking={attackingId === warrior.instanceId}
                 isHit={hitId === warrior.instanceId}
+                isCriticalHit={criticalHits.has(warrior.instanceId)}
                 floatingNumbers={floatingNumbers.filter((f) => f.targetId === warrior.instanceId)}
                 showSkillName={skillNames[warrior.instanceId] || null}
                 onOpenDetail={() => handleOpenWarriorDetail(warrior, 'enemy')}
@@ -907,6 +956,7 @@ export default function BattleArena({
                 isPlayer
                 isAttacking={attackingId === warrior.instanceId}
                 isHit={hitId === warrior.instanceId}
+                isCriticalHit={criticalHits.has(warrior.instanceId)}
                 floatingNumbers={floatingNumbers.filter((f) => f.targetId === warrior.instanceId)}
                 showSkillName={skillNames[warrior.instanceId] || null}
                 onOpenDetail={() => handleOpenWarriorDetail(warrior, 'player')}
@@ -947,49 +997,93 @@ export default function BattleArena({
         onConfirmTactic={handleConfirmTactic}
       />
 
-      {battle.result && !animating && (
-        <div className="mt-6 text-center">
-          <div
-            className={`inline-block px-8 py-4 rounded-2xl border-2 backdrop-blur-sm mb-4 ${
-              battle.result === 'win'
-                ? 'bg-yellow-900/40 border-yellow-500/50'
-                : battle.result === 'lose'
-                  ? 'bg-red-900/40 border-red-500/50'
-                  : 'bg-gray-800/40 border-gray-500/50'
-            }`}
-            style={battle.result === 'win' ? { boxShadow: '0 0 30px rgba(234,179,8,0.3)' } : undefined}
+      <AnimatePresence>
+        {battle.result && !animating && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            <div
-              className={`text-4xl font-black mb-2 ${
-                battle.result === 'win' ? 'text-yellow-400' : battle.result === 'lose' ? 'text-red-400' : 'text-gray-400'
-              }`} style={{ textShadow: '0 2px 10px currentColor' }}
-            >
-              {battle.result === 'win' ? '🎉 승리!' : battle.result === 'lose' ? '💀 패배...' : '🤝 무승부'}
-            </div>
-            {battle.result === 'win' && <div className="text-sm text-green-300 font-bold mb-1">일반팩 1개 획득!</div>}
-            {streakReward && (
-              <div
-                className="text-sm font-bold mb-1"
-                style={{ animation: 'streakBounce 0.6s ease-out', color: streakReward.type === 'hero' ? '#a855f7' : '#3b82f6' }}
-              >
-                🔥 {streakReward.streak}연승 보상! {streakReward.type === 'hero' ? '영웅팩' : '희귀팩'} 획득!
-              </div>
-            )}
-          </div>
-          <div>
-            <button
-              onClick={() => {
-                onBattleEndWithSummary?.(battle.result!);
-                onBattleEnd(battle.result!);
+            <motion.div
+              className="absolute inset-0 bg-black/74"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+
+            <motion.div
+              className={`relative w-full max-w-sm rounded-3xl border-2 px-6 py-7 text-center backdrop-blur-md ${
+                battle.result === 'win'
+                  ? 'border-yellow-400/60 bg-yellow-900/28'
+                  : battle.result === 'lose'
+                    ? 'border-red-400/60 bg-red-900/28'
+                    : 'border-slate-400/60 bg-slate-900/25'
+              }`}
+              initial={{ y: 34, opacity: 0, scale: 0.88, rotateX: 18 }}
+              animate={{ y: 0, opacity: 1, scale: 1, rotateX: 0 }}
+              exit={{ y: 18, opacity: 0, scale: 0.94 }}
+              transition={{ type: 'spring', stiffness: 280, damping: 24, mass: 0.82 }}
+              style={{
+                boxShadow:
+                  battle.result === 'win'
+                    ? '0 0 32px rgba(250,204,21,0.35), 0 16px 42px rgba(15,23,42,0.52)'
+                    : battle.result === 'lose'
+                      ? '0 0 32px rgba(248,113,113,0.3), 0 16px 42px rgba(15,23,42,0.52)'
+                      : '0 0 24px rgba(148,163,184,0.28), 0 16px 42px rgba(15,23,42,0.52)',
               }}
-              className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-all hover:scale-105 active:scale-95"
-              style={{ boxShadow: '0 4px 15px rgba(37,99,235,0.4)' }}
             >
-              확인
-            </button>
-          </div>
-        </div>
-      )}
+              <motion.div
+                className={`text-5xl font-black mb-2 ${
+                  battle.result === 'win' ? 'text-yellow-300' : battle.result === 'lose' ? 'text-red-300' : 'text-slate-300'
+                }`}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.08, type: 'spring', stiffness: 320, damping: 20 }}
+                style={{ textShadow: '0 0 24px currentColor, 0 4px 16px rgba(0,0,0,0.5)' }}
+              >
+                {battle.result === 'win' ? '🎉 승리!' : battle.result === 'lose' ? '💀 패배...' : '🤝 무승부'}
+              </motion.div>
+
+              {battle.result === 'win' && (
+                <motion.div
+                  className="text-sm text-green-300 font-bold mb-1"
+                  initial={{ y: 8, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.14 }}
+                >
+                  일반팩 1개 획득!
+                </motion.div>
+              )}
+
+              {streakReward && (
+                <motion.div
+                  className="text-sm font-bold mb-1"
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  style={{ color: streakReward.type === 'hero' ? '#a855f7' : '#3b82f6' }}
+                >
+                  🔥 {streakReward.streak}연승 보상! {streakReward.type === 'hero' ? '영웅팩' : '희귀팩'} 획득!
+                </motion.div>
+              )}
+
+              <motion.button
+                onClick={() => {
+                  onBattleEndWithSummary?.(battle.result!);
+                  onBattleEnd(battle.result!);
+                }}
+                whileHover={{ y: -2, scale: 1.02 }}
+                whileTap={{ scale: 0.93 }}
+                className="mt-4 px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-colors"
+                style={{ boxShadow: '0 4px 15px rgba(37,99,235,0.4)' }}
+              >
+                확인
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <CardDetailModal
         card={detailCard}
@@ -999,7 +1093,7 @@ export default function BattleArena({
       />
 
       <BattleLogPanel open={showLog} log={battle.log} onClose={() => setShowLog(false)} />
-    </div>
+    </motion.div>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import { motion } from 'motion/react';
 import { Grade, BattleWarrior } from '@/types/game';
 import { getWarriorById } from '@/data/cards';
 import { GRADE_COLORS } from '@/types/game';
@@ -21,6 +22,7 @@ export interface WarriorSlotProps {
   isPlayer: boolean;
   isAttacking: boolean;
   isHit: boolean;
+  isCriticalHit?: boolean;
   floatingNumbers: FloatingNumber[];
   showSkillName: string | null;
   onOpenDetail?: () => void;
@@ -62,6 +64,7 @@ export default function WarriorSlot({
   isPlayer,
   isAttacking,
   isHit,
+  isCriticalHit,
   floatingNumbers,
   showSkillName,
   onOpenDetail,
@@ -113,6 +116,8 @@ export default function WarriorSlot({
           ? '0 0 20px rgba(255,200,0,0.6), 0 0 40px rgba(255,200,0,0.3)'
           : isHit
           ? '0 0 24px rgba(239,68,68,0.8), inset 0 0 14px rgba(239,68,68,0.35)'
+          : isCriticalHit
+          ? '0 0 26px rgba(250,204,21,0.7), 0 0 44px rgba(250,204,21,0.36)'
           : isLegend
           ? `0 0 12px ${gradeColor}44`
           : 'none',
@@ -127,6 +132,15 @@ export default function WarriorSlot({
       {isHit && !isDead && (
         <div className="absolute -top-2 -left-1 z-20 rounded-full border border-red-200/80 bg-red-600/95 px-1.5 py-0.5 text-[8px] font-black text-white shadow-[0_0_12px_rgba(239,68,68,0.9)]">
           피격
+        </div>
+      )}
+
+      {isCriticalHit && !isDead && (
+        <div
+          className="absolute -top-7 left-1/2 -translate-x-1/2 z-30 rounded-full border border-yellow-200/80 bg-yellow-500/90 px-2 py-0.5 text-[9px] font-black text-black"
+          style={{ animation: 'skillPopup 0.45s ease-out forwards', boxShadow: '0 0 12px rgba(250,204,21,0.75)' }}
+        >
+          CRITICAL
         </div>
       )}
 
@@ -208,7 +222,12 @@ export default function WarriorSlot({
       <div className="text-[9px] font-medium" style={{ color: `${gradeColor}cc` }}>{card.faction}</div>
 
       <div className="mt-1.5 h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/10">
-        <div className={`h-full ${hpColor} transition-all duration-300 ease-out`} style={{ width: `${hpPercent}%` }} />
+        <motion.div
+          className={`h-full ${hpColor}`}
+          animate={{ width: `${hpPercent}%` }}
+          transition={{ type: 'spring', stiffness: 130, damping: 24, mass: 0.8 }}
+          style={{ width: `${hpPercent}%` }}
+        />
       </div>
       <div className="text-[9px] sm:text-[10px] text-white/70 font-medium mt-0.5">
         {warrior.currentHp}/{warrior.maxHp}

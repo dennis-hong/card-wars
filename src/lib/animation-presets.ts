@@ -53,8 +53,8 @@ export const BOOSTER_ANIMATION_PRESETS = {
 export const BATTLE_ANIMATION_PRESETS = {
   actionDelays: {
     showLogMs: 100,
-    showSlashMs: 80,
-    showHitMs: 350,
+    showSlashMs: 120,
+    showHitMs: 380,
     clearStateMs: 100,
     showSkillNameMs: 100,
     showOverheadMs: 300,

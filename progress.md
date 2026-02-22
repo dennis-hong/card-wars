@@ -149,3 +149,32 @@ Original prompt: 웹 게임 개발 스킬을 활용해서 현재 UI 를 검토�
     - 미보유 계정 상태에서 컬렉션 진입 시 전체 카드가 잠금 실루엣으로 노출됨 확인.
     - 로컬 스토리지에 보유 카드 1장(조조) 주입 후 컬렉션에서 해당 카드만 상세 모달 진입/강화 버튼 노출 확인.
     - 미보유 카드 클릭 시 상세 모달이 열리지 않음 확인.
+- New request (2026-02-22): full UI polish + motion enhancement pass across card/battle/booster/shell.
+- Implemented shared motion foundation:
+  - Added `PageTransitionLayer` for pathname-keyed fade/slide route transitions.
+  - Added global ambient floating particle background (`AmbientParticles`) in root layout.
+  - Added reusable loading skeleton screen (`LoadingScreen`) and wired into core loading states (`GameStateContext`, home, battle page).
+- Implemented interaction polish:
+  - Bottom tab bar now has animated active pill + indicator + spring icon motion.
+  - Title toast modal now uses spring slide-in and staggered card reveal animation.
+- Implemented card hover/tap polish:
+  - `WarriorCardView` and `TacticCardView` refactored to motion-based spring hover/tap + pointer tilt.
+  - Added deeper card shadows and grade-based glow hierarchy (subtle S / steady SS / pulsing SSS) plus holo foil overlays for high grades.
+- Implemented battle animation pass:
+  - Rebuilt slash effect with trails/particles and longer timing window.
+  - Added critical-impact detection, screen shake, and critical flash overlay.
+  - Added smooth motion HP bar drain and critical hit badge in warrior slots.
+  - Replaced result block with dramatic full-screen victory/defeat entrance overlay.
+- Implemented booster pass:
+  - Reworked pack tear sequence with richer seam split and denser burst particles.
+  - Reworked reveal card slot with real flip animation, rare golden glow ring, and SS/SSS holographic overlays.
+- Verification (2026-02-22):
+  - `npm run lint` passed.
+  - `npm run build` failed in this sandbox due Turbopack process binding permission (`Operation not permitted`) while processing `globals.css`.
+  - Fallback compile verification `npm run build -- --webpack` passed (all app routes generated).
+- develop-web-game Playwright client run attempt:
+  - Blocked by sandbox networking restriction: `next dev` cannot bind to localhost (`listen EPERM 127.0.0.1:3000`).
+  - Therefore automated screenshot/console inspection via `$WEB_GAME_CLIENT` could not be executed in this environment.
+- TODO / handoff notes:
+  - On a non-restricted machine, run `npm run dev`, then execute `$WEB_GAME_CLIENT` capture for `/booster` and `/battle` to visually validate particle density and critical shake intensity.
+  - If motion feels heavy on low-end mobile, reduce card tilt spring stiffness in `WarriorCardView`/`TacticCardView` and lower ambient particle count in `AmbientParticles`.

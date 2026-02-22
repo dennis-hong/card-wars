@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PackType } from '@/types/game';
 import { PACK_INFO } from '@/types/game';
-import { createSeededRandom } from '@/lib/rng';
 
 interface Props {
   packType: PackType;
@@ -14,15 +13,67 @@ interface Props {
 
 type TearStage = 'charge' | 'rip' | 'burst';
 
+function seeded(seed: number) {
+  const value = Math.sin(seed * 63.73) * 10000;
+  return value - Math.floor(value);
+}
+
+function TearParticles({
+  stage,
+  compact,
+  color,
+}: {
+  stage: TearStage;
+  compact: boolean;
+  color: string;
+}) {
+  const count = stage === 'rip' ? 18 : 30;
+
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      {Array.from({ length: count }).map((_, i) => {
+        const angle = seeded(i + 5) * Math.PI * 2;
+        const distance = (compact ? 130 : 170) + seeded((i + 9) * 3) * (compact ? 85 : 125);
+        const tx = Math.cos(angle) * distance;
+        const ty = Math.sin(angle) * distance * (stage === 'burst' ? 0.85 : 0.55);
+        const dot = 2 + Math.round(seeded((i + 11) * 7) * (stage === 'burst' ? 4 : 2));
+
+        return (
+          <motion.span
+            key={`${stage}-${i}`}
+            className="absolute left-1/2 top-1/2 rounded-full"
+            style={{
+              width: dot,
+              height: dot,
+              marginLeft: -dot / 2,
+              marginTop: -dot / 2,
+              background: i % 3 === 0 ? '#fff7d6' : color,
+              boxShadow: `0 0 12px ${color}`,
+            }}
+            initial={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
+            animate={{
+              x: [0, tx],
+              y: [0, ty],
+              opacity: [0, 1, 0],
+              scale: [0.5, 1.2, 0.4],
+            }}
+            transition={{ duration: stage === 'rip' ? 0.42 : 0.7, ease: 'easeOut', delay: i * 0.009 }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function PackTearView({ packType, compact, onDone }: Props) {
   const info = PACK_INFO[packType];
   const [stage, setStage] = useState<TearStage>('charge');
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setStage('rip'), 340),
-      setTimeout(() => setStage('burst'), 840),
-      setTimeout(onDone, 1260),
+      setTimeout(() => setStage('rip'), 360),
+      setTimeout(() => setStage('burst'), 860),
+      setTimeout(onDone, 1320),
     ];
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, [onDone]);
@@ -38,125 +89,94 @@ export default function PackTearView({ packType, compact, onDone }: Props) {
       />
 
       <AnimatePresence>
+        {stage !== 'charge' && <TearParticles stage={stage} compact={compact} color={info.color} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {stage === 'burst' && (
           <motion.div
             className="absolute inset-0"
-            style={{ background: `radial-gradient(circle, ${info.color}55 0%, transparent 62%)` }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 1, 0] }}
+            style={{ background: `radial-gradient(circle, ${info.color}66 0%, transparent 62%)` }}
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: [0, 1, 0], scale: [0.6, 1.2, 1.7] }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.52, ease: 'easeOut' }}
           />
         )}
       </AnimatePresence>
 
-      <div
-        className="relative"
-        style={{ width: compact ? 192 : 224, height: compact ? 248 : 288 }}
-      >
+      <div className="relative" style={{ width: compact ? 196 : 236, height: compact ? 252 : 300 }}>
         <motion.div
           className="absolute inset-0 rounded-2xl border"
           style={{
             borderColor: `${info.color}`,
-            background: `linear-gradient(150deg, ${info.color}44 0%, rgba(9,12,22,0.95) 50%, ${info.color}30 100%)`,
+            background: `linear-gradient(150deg, ${info.color}4a 0%, rgba(9,12,22,0.95) 50%, ${info.color}34 100%)`,
           }}
           animate={
             stage === 'charge'
-              ? { scale: [1, 0.98, 1.04], opacity: 1 }
+              ? { scale: [1, 0.98, 1.05], opacity: [0.9, 1, 0.95] }
               : stage === 'rip'
-              ? { scale: [1.04, 0.98], opacity: [1, 0.25, 0] }
+              ? { scale: [1.05, 1], opacity: [1, 0.42, 0] }
               : { scale: 0.96, opacity: 0 }
           }
           transition={{
-            duration: stage === 'charge' ? 0.33 : 0.38,
+            duration: stage === 'charge' ? 0.34 : 0.38,
             repeat: stage === 'charge' ? Infinity : 0,
             ease: 'easeOut',
           }}
         />
 
         <motion.div
-          className="absolute inset-y-0 left-0 w-1/2 rounded-l-2xl border-r border-white/18"
-          style={{ background: `linear-gradient(120deg, ${info.color}66, rgba(7,10,19,0.85))` }}
+          className="absolute inset-y-0 left-0 w-1/2 rounded-l-2xl border-r border-white/20"
+          style={{ background: `linear-gradient(120deg, ${info.color}66, rgba(7,10,19,0.88))` }}
           animate={
             stage === 'rip'
-              ? { x: -92, rotate: -15, opacity: [1, 1, 0.3] }
+              ? { x: compact ? -106 : -126, rotate: -17, opacity: [1, 1, 0.25] }
               : stage === 'burst'
-              ? { x: -150, rotate: -24, opacity: 0 }
+              ? { x: compact ? -170 : -200, rotate: -28, opacity: 0 }
               : { x: 0, rotate: 0, opacity: 1 }
           }
-          transition={{ duration: stage === 'charge' ? 0.2 : 0.45, ease: 'easeOut' }}
+          transition={{ duration: stage === 'charge' ? 0.22 : 0.48, ease: 'easeOut' }}
         />
 
         <motion.div
-          className="absolute inset-y-0 right-0 w-1/2 rounded-r-2xl border-l border-white/18"
-          style={{ background: `linear-gradient(240deg, ${info.color}66, rgba(7,10,19,0.85))` }}
+          className="absolute inset-y-0 right-0 w-1/2 rounded-r-2xl border-l border-white/20"
+          style={{ background: `linear-gradient(240deg, ${info.color}66, rgba(7,10,19,0.88))` }}
           animate={
             stage === 'rip'
-              ? { x: 92, rotate: 15, opacity: [1, 1, 0.3] }
+              ? { x: compact ? 106 : 126, rotate: 17, opacity: [1, 1, 0.25] }
               : stage === 'burst'
-              ? { x: 150, rotate: 24, opacity: 0 }
+              ? { x: compact ? 170 : 200, rotate: 28, opacity: 0 }
               : { x: 0, rotate: 0, opacity: 1 }
           }
-          transition={{ duration: stage === 'charge' ? 0.2 : 0.45, ease: 'easeOut' }}
+          transition={{ duration: stage === 'charge' ? 0.22 : 0.48, ease: 'easeOut' }}
         />
 
         <motion.div
-          className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2"
+          className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2"
           style={{ background: `linear-gradient(180deg, transparent, #fff, transparent)` }}
           animate={
             stage === 'charge'
-              ? { opacity: [0.2, 0.65, 0.2], scaleY: [0.6, 1.1, 0.7] }
+              ? { opacity: [0.2, 0.75, 0.2], scaleY: [0.55, 1.12, 0.7] }
               : stage === 'rip'
-              ? { opacity: [0.8, 1, 0.4], scaleY: [1, 1.2, 0.6] }
+              ? { opacity: [0.65, 1, 0.45], scaleY: [1, 1.3, 0.62] }
               : { opacity: 0 }
           }
-          transition={{ duration: 0.42 }}
+          transition={{ duration: 0.4 }}
         />
 
         <motion.div
-          className="absolute left-1/2 top-1/2 w-24 h-24 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{ background: `radial-gradient(circle, ${info.color}cc 0%, ${info.color}44 45%, transparent 70%)` }}
+          className="absolute left-1/2 top-1/2 w-28 h-28 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ background: `radial-gradient(circle, ${info.color}d0 0%, ${info.color}45 48%, transparent 75%)` }}
           animate={
             stage === 'burst'
-              ? { scale: [0.4, 1.35, 2], opacity: [0.4, 0.95, 0] }
+              ? { scale: [0.4, 1.35, 2.2], opacity: [0.35, 1, 0] }
               : stage === 'rip'
-              ? { scale: [0.2, 0.8], opacity: [0.1, 0.5] }
+              ? { scale: [0.2, 0.95], opacity: [0.2, 0.6] }
               : { scale: 0.1, opacity: 0.2 }
           }
-          transition={{ duration: 0.45, ease: 'easeOut' }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
         />
-
-      {stage !== 'charge' && (
-        <div className="absolute inset-0">
-          {Array.from({ length: 14 }).map((_, i) => {
-            const progress = createSeededRandom(i + 1).next();
-            return (
-              <motion.div
-                  key={i}
-                  className="absolute left-1/2 top-1/2 rounded-sm"
-                  style={{
-                    width: compact ? 5 : 6,
-                    height: compact ? 2 : 3,
-                    background: i % 2 ? '#ffffff' : info.color,
-                    position: 'absolute',
-                    left: compact ? -2 : -2,
-                    top: compact ? -2 : -2,
-                    marginLeft: -2.5,
-                    marginTop: -2.5,
-                  }}
-                  initial={{ x: -2, y: -2, opacity: 0 }}
-                  animate={{
-                    x: (progress - 0.5) * (compact ? 220 : 280),
-                    y: (progress - 0.5) * (compact ? 190 : 240),
-                    rotate: progress * 420,
-                    opacity: stage === 'burst' ? [0, 1, 0] : [0, 0.7, 0],
-                  }}
-                  transition={{ duration: 0.58, ease: 'easeOut', delay: i * 0.015 }}
-                />
-              );
-            })}
-          </div>
-        )}
       </div>
 
       <motion.div

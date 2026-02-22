@@ -7,6 +7,7 @@ import { getTitleById } from '@/data/titles';
 import { useGameStateContext } from '@/context/GameStateContext';
 import { useRunContext } from '@/context/run-context';
 import { SFX } from '@/lib/sound';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 
 export default function Home() {
   const router = useRouter();
@@ -30,11 +31,7 @@ export default function Home() {
   };
 
   if (!loaded || !runLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-white text-lg animate-pulse">로딩 중...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (

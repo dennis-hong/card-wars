@@ -5,6 +5,8 @@ import { GameStateProvider } from '@/context/GameStateContext';
 import { RunContextProvider } from '@/context/run-context';
 import BottomTabBar from '@/components/shell/BottomTabBar';
 import GameToasts from '@/components/shell/GameToasts';
+import AmbientParticles from '@/components/shell/AmbientParticles';
+import PageTransitionLayer from '@/components/shell/PageTransitionLayer';
 
 export const metadata: Metadata = {
   title: 'Warlords: Card Wars',
@@ -29,7 +31,7 @@ export default function RootLayout({
     <html lang="ko">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#b91c1c" />
+        <meta name="theme-color" content="#071635" />
         <meta name="application-name" content="삼국쟁패: Card Wars" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Card Wars" />
@@ -40,7 +42,10 @@ export default function RootLayout({
         <GameStateProvider>
           <RunContextProvider>
             <GameToasts>
-              {children}
+              <AmbientParticles />
+              <PageTransitionLayer>
+                {children}
+              </PageTransitionLayer>
               <BottomTabBar />
               <script
                 dangerouslySetInnerHTML={{
